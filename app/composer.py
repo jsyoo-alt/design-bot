@@ -93,6 +93,12 @@ def _download_image(url: str) -> Image.Image:
             headers["Authorization"] = f"Bearer {token}"
     resp = requests.get(url, timeout=10, headers=headers)
     resp.raise_for_status()
+    content_type = resp.headers.get("Content-Type", "")
+    if "text/html" in content_type or not resp.content:
+        raise ValueError(
+            f"이미지 다운로드 실패 — Slack files:read 스코프가 없거나 URL이 유효하지 않습니다. "
+            f"(Content-Type: {content_type}, URL: {url[:80]})"
+        )
     return Image.open(io.BytesIO(resp.content)).convert("RGBA")
 
 

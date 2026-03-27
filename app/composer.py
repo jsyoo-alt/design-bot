@@ -7,7 +7,7 @@ import os
 import io
 import requests
 from PIL import Image, ImageDraw, ImageFont
-from config import BACKGROUNDS_DIR, FONTS_DIR
+from app.config import BACKGROUNDS_DIR, FONTS_DIR
 
 # 카카오 비즈보드 공식 스펙
 CANVAS_SIZE = (1029, 258)

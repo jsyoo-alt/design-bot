@@ -13,8 +13,8 @@ from fastapi.responses import JSONResponse
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-import composer
-from config import SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET
+from app import composer
+from app.config import SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET
 
 app = FastAPI()
 slack = WebClient(token=SLACK_BOT_TOKEN)

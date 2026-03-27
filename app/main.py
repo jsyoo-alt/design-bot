@@ -316,7 +316,7 @@ def handle_submission(payload: dict):
             img_bytes = composer.compose_basic_2line(
                 title=title,
                 sub=sub,
-                bg_image_url=image_url,
+                object_image_url=image_url,
                 badge_text=badge,
             )
         elif template_key == "basic_2line_left_obj":

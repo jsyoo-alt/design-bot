@@ -56,20 +56,25 @@ def _is_removal_successful(img: Image.Image) -> bool:
     return 0.10 <= ratio <= 0.90
 
 
-def try_remove_background(img: Image.Image) -> tuple[Image.Image, bool]:
+def try_remove_background(img: Image.Image, timeout: int = 30) -> tuple[Image.Image, bool]:
     """
     rembg로 배경 제거 시도.
     성공 여부를 함께 반환: (결과 이미지, 성공 여부)
-    실패하면 원본 이미지와 False 반환.
+    실패하거나 timeout 초 초과하면 원본 이미지와 False 반환.
     """
+    import concurrent.futures
     try:
         import numpy as np
         from rembg import remove as rembg_remove  # 무거운 import를 실제 사용 시점에만 로드
 
         buf_in = io.BytesIO()
         img.save(buf_in, format="PNG")
-        buf_in.seek(0)
-        result_bytes = rembg_remove(buf_in.read())
+        data = buf_in.getvalue()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(rembg_remove, data)
+            result_bytes = future.result(timeout=timeout)
+
         result = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
         if _is_removal_successful(result):
             return result, True
@@ -203,17 +208,24 @@ def compose_bizboard(
 def compose_basic_2line(
     title: str,
     sub: str,
-    bg_image_url: str | None = None,
+    object_image_url: str | None = None,
     badge_text: str | None = None,
 ) -> bytes:
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 배경 상품 이미지가 있으면 전체 배경에 합성
-    if bg_image_url:
-        prod_img = _download_image(bg_image_url)
-        prod_img = _fit_image(prod_img, CANVAS_SIZE[0], CANVAS_SIZE[1])
-        _paste_with_alpha(canvas, prod_img, (0, 0))
+    # 오브제 이미지 (우측 315x258) — 누끼 시도 후 실패 시 썸네일로 폴백
+    if object_image_url:
+        obj_img = _download_image(object_image_url)
+        obj_img, removed = try_remove_background(obj_img)
+        if removed:
+            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
+            x_offset = CANVAS_SIZE[0] - OBJECT_AREA_W + (OBJECT_AREA_W - obj_img.width) // 2
+            y_offset = (OBJECT_AREA_H - obj_img.height) // 2
+            _paste_with_alpha(canvas, obj_img, (x_offset, y_offset))
+        else:
+            obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
+            _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)

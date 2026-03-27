@@ -7,16 +7,20 @@ import hmac
 import time
 import json
 import io
+import logging
+import os
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
 from slack_sdk import WebClient
+from slack_sdk.errors import SlackApiError
 
 from app import composer
-from app.config import SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET
+from app.config import SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, BACKGROUNDS_DIR, FONTS_DIR
 
-app = FastAPI()
-slack = WebClient(token=SLACK_BOT_TOKEN)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+log = logging.getLogger(__name__)
 
 TEMPLATES = {
     "비즈보드": "bizboard",
@@ -24,18 +28,60 @@ TEMPLATES = {
     "기본_2줄형_좌측": "basic_2line_left_obj",
 }
 
+REQUIRED_BACKGROUNDS = ["bg_bizboard.png", "bg_basic_2line.png", "bg_basic_2line_left.png"]
+REQUIRED_FONTS = ["SpoqaHanSansNeo-Bold.ttf", "SpoqaHanSansNeo-Regular.ttf"]
+
+
+# ─────────────────────────────────────────────
+# 시작 시 필수 파일 / 환경변수 검증
+# ─────────────────────────────────────────────
+def _check_assets() -> list[str]:
+    """누락된 파일 목록 반환. 빈 리스트면 정상."""
+    missing = []
+    for fname in REQUIRED_BACKGROUNDS:
+        path = os.path.join(BACKGROUNDS_DIR, fname)
+        if not os.path.exists(path):
+            missing.append(f"배경 이미지 없음: assets/backgrounds/{fname}")
+    for fname in REQUIRED_FONTS:
+        path = os.path.join(FONTS_DIR, fname)
+        if not os.path.exists(path):
+            missing.append(f"폰트 파일 없음: assets/fonts/{fname}")
+    return missing
+
+
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    missing = _check_assets()
+    if missing:
+        for m in missing:
+            log.error("[STARTUP] %s", m)
+        log.error("[STARTUP] 위 파일들이 없습니다. git에 추가했는지 확인하세요.")
+    else:
+        log.info("[STARTUP] 모든 필수 파일 확인 완료")
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
+slack = WebClient(token=SLACK_BOT_TOKEN)
+
 
 # ─────────────────────────────────────────────
 # Slack 서명 검증
 # ─────────────────────────────────────────────
 def verify_slack_signature(request_body: bytes, timestamp: str, signature: str) -> bool:
-    if abs(time.time() - int(timestamp)) > 60 * 5:
+    try:
+        if not timestamp or not signature:
+            return False
+        if abs(time.time() - int(timestamp)) > 60 * 5:
+            return False
+        sig_base = f"v0:{timestamp}:{request_body.decode()}"
+        computed = "v0=" + hmac.new(
+            SLACK_SIGNING_SECRET.encode(), sig_base.encode(), hashlib.sha256
+        ).hexdigest()
+        return hmac.compare_digest(computed, signature)
+    except (ValueError, Exception) as e:
+        log.warning("서명 검증 실패: %s", e)
         return False
-    sig_base = f"v0:{timestamp}:{request_body.decode()}"
-    computed = "v0=" + hmac.new(
-        SLACK_SIGNING_SECRET.encode(), sig_base.encode(), hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(computed, signature)
 
 
 # ─────────────────────────────────────────────
@@ -51,8 +97,11 @@ async def slash_command(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=403, detail="Invalid signature")
 
     form = await request.form()
-    trigger_id = form.get("trigger_id")
-    channel_id = form.get("channel_id")
+    trigger_id = form.get("trigger_id", "")
+    channel_id = form.get("channel_id", "")
+
+    if not trigger_id or not channel_id:
+        raise HTTPException(status_code=400, detail="trigger_id or channel_id missing")
 
     background_tasks.add_task(open_modal, trigger_id, channel_id)
     return JSONResponse({"response_type": "ephemeral", "text": "소재 옵션을 선택해 주세요 ✏️"})
@@ -72,10 +121,15 @@ def open_modal(trigger_id: str, channel_id: str):
                     break
             if auto_image_url:
                 break
-    except Exception:
-        pass
+    except SlackApiError as e:
+        # channels:history 스코프 없으면 무시하고 계속 진행
+        log.warning("채널 히스토리 조회 실패 (스코프 확인 필요): %s", e.response.get("error"))
 
-    found_hint = "✅ 직전 이미지 자동 감지됨 — URL 비워도 됩니다" if auto_image_url else "이미지를 채널에 먼저 올린 후 /소재생성 을 입력하면 자동으로 가져옵니다"
+    found_hint = (
+        "✅ 직전 이미지 자동 감지됨 — URL 비워도 됩니다"
+        if auto_image_url
+        else "이미지를 채널에 먼저 올린 후 /소재생성 을 입력하면 자동으로 가져옵니다"
+    )
 
     metadata = json.dumps({
         "channel_id": channel_id,
@@ -83,101 +137,104 @@ def open_modal(trigger_id: str, channel_id: str):
         "thread_ts": thread_ts,
     })
 
-    slack.views_open(
-        trigger_id=trigger_id,
-        view={
-            "type": "modal",
-            "callback_id": "create_material",
-            "private_metadata": metadata,
-            "title": {"type": "plain_text", "text": "카카오 소재 생성"},
-            "submit": {"type": "plain_text", "text": "생성하기"},
-            "close": {"type": "plain_text", "text": "취소"},
-            "blocks": [
-                {
-                    "type": "input",
-                    "block_id": "template",
-                    "label": {"type": "plain_text", "text": "템플릿"},
-                    "element": {
-                        "type": "static_select",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "템플릿 선택"},
-                        "options": [
-                            {"text": {"type": "plain_text", "text": k}, "value": k}
-                            for k in TEMPLATES
-                        ],
+    try:
+        slack.views_open(
+            trigger_id=trigger_id,
+            view={
+                "type": "modal",
+                "callback_id": "create_material",
+                "private_metadata": metadata,
+                "title": {"type": "plain_text", "text": "카카오 소재 생성"},
+                "submit": {"type": "plain_text", "text": "생성하기"},
+                "close": {"type": "plain_text", "text": "취소"},
+                "blocks": [
+                    {
+                        "type": "input",
+                        "block_id": "template",
+                        "label": {"type": "plain_text", "text": "템플릿"},
+                        "element": {
+                            "type": "static_select",
+                            "action_id": "value",
+                            "placeholder": {"type": "plain_text", "text": "템플릿 선택"},
+                            "options": [
+                                {"text": {"type": "plain_text", "text": k}, "value": k}
+                                for k in TEMPLATES
+                            ],
+                        },
                     },
-                },
-                {
-                    "type": "input",
-                    "block_id": "title",
-                    "label": {"type": "plain_text", "text": "메인 카피"},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "예: 레드윙 UP TO 13%"},
-                        "max_length": 30,
+                    {
+                        "type": "input",
+                        "block_id": "title",
+                        "label": {"type": "plain_text", "text": "메인 카피"},
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "value",
+                            "placeholder": {"type": "plain_text", "text": "예: 레드윙 UP TO 13%"},
+                            "max_length": 30,
+                        },
                     },
-                },
-                {
-                    "type": "input",
-                    "block_id": "sub",
-                    "label": {"type": "plain_text", "text": "서브 카피"},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "예: 베스트템 재입고"},
-                        "max_length": 30,
+                    {
+                        "type": "input",
+                        "block_id": "sub",
+                        "label": {"type": "plain_text", "text": "서브 카피"},
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "value",
+                            "placeholder": {"type": "plain_text", "text": "예: 베스트템 재입고"},
+                            "max_length": 30,
+                        },
                     },
-                },
-                {
-                    "type": "input",
-                    "block_id": "title_l",
-                    "label": {"type": "plain_text", "text": "좌측 메인 카피 (비즈보드 전용)"},
-                    "optional": True,
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "예: 푸마"},
+                    {
+                        "type": "input",
+                        "block_id": "title_l",
+                        "label": {"type": "plain_text", "text": "좌측 메인 카피 (비즈보드 전용)"},
+                        "optional": True,
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "value",
+                            "placeholder": {"type": "plain_text", "text": "예: 푸마"},
+                        },
                     },
-                },
-                {
-                    "type": "input",
-                    "block_id": "sub_l",
-                    "label": {"type": "plain_text", "text": "좌측 서브 카피 (비즈보드 전용)"},
-                    "optional": True,
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "예: 신규 발매"},
+                    {
+                        "type": "input",
+                        "block_id": "sub_l",
+                        "label": {"type": "plain_text", "text": "좌측 서브 카피 (비즈보드 전용)"},
+                        "optional": True,
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "value",
+                            "placeholder": {"type": "plain_text", "text": "예: 신규 발매"},
+                        },
                     },
-                },
-                {
-                    "type": "input",
-                    "block_id": "badge",
-                    "label": {"type": "plain_text", "text": "뱃지 텍스트 (선택)"},
-                    "optional": True,
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "예: 32%"},
-                        "max_length": 10,
+                    {
+                        "type": "input",
+                        "block_id": "badge",
+                        "label": {"type": "plain_text", "text": "뱃지 텍스트 (선택)"},
+                        "optional": True,
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "value",
+                            "placeholder": {"type": "plain_text", "text": "예: 32%"},
+                            "max_length": 10,
+                        },
                     },
-                },
-                {
-                    "type": "input",
-                    "block_id": "image_url",
-                    "label": {"type": "plain_text", "text": "상품 이미지 URL (선택)"},
-                    "optional": True,
-                    "hint": {"type": "plain_text", "text": found_hint},
-                    "element": {
-                        "type": "plain_text_input",
-                        "action_id": "value",
-                        "placeholder": {"type": "plain_text", "text": "https://..."},
+                    {
+                        "type": "input",
+                        "block_id": "image_url",
+                        "label": {"type": "plain_text", "text": "상품 이미지 URL (선택)"},
+                        "optional": True,
+                        "hint": {"type": "plain_text", "text": found_hint},
+                        "element": {
+                            "type": "plain_text_input",
+                            "action_id": "value",
+                            "placeholder": {"type": "plain_text", "text": "https://..."},
+                        },
                     },
-                },
-            ],
-        },
-    )
+                ],
+            },
+        )
+    except SlackApiError as e:
+        log.error("모달 열기 실패: %s", e.response.get("error"))
 
 
 # ─────────────────────────────────────────────
@@ -203,21 +260,27 @@ async def interactive(request: Request, background_tasks: BackgroundTasks):
 
 
 def _get_val(values: dict, block_id: str) -> str | None:
-    element = values.get(block_id, {}).get("value", {})
+    """block_id로 모달 입력값 추출. static_select / plain_text_input 모두 처리."""
+    element = values.get(block_id, {}).get("value")
     if not isinstance(element, dict):
         return None
-    # static_select는 selected_option 안에 value가 있음
     if element.get("type") == "static_select":
         return (element.get("selected_option") or {}).get("value") or None
-    # plain_text_input
     return element.get("value") or None
 
 
 def handle_submission(payload: dict):
-    metadata = json.loads(payload["view"]["private_metadata"])
-    channel_id = metadata["channel_id"]
-    auto_image_url = metadata.get("image_url")
-    thread_ts = metadata.get("thread_ts")
+    # private_metadata 파싱 — 구 버전(문자열) 호환 처리 포함
+    raw_meta = payload["view"]["private_metadata"]
+    try:
+        metadata = json.loads(raw_meta)
+        channel_id = metadata["channel_id"]
+        auto_image_url = metadata.get("image_url")
+        thread_ts = metadata.get("thread_ts")
+    except (json.JSONDecodeError, KeyError):
+        channel_id = raw_meta  # 구 포맷 폴백
+        auto_image_url = None
+        thread_ts = None
 
     values = payload["view"]["state"]["values"]
     template  = _get_val(values, "template")
@@ -226,7 +289,9 @@ def handle_submission(payload: dict):
     title_l   = _get_val(values, "title_l")
     sub_l     = _get_val(values, "sub_l")
     badge     = _get_val(values, "badge")
-    image_url = _get_val(values, "image_url") or auto_image_url  # URL 미입력 시 자동 감지 이미지 사용
+    image_url = _get_val(values, "image_url") or auto_image_url
+
+    log.info("소재 생성 요청 — template=%s title=%s image_url=%s", template, title, image_url)
 
     slack.chat_postMessage(
         channel=channel_id,
@@ -236,6 +301,8 @@ def handle_submission(payload: dict):
 
     try:
         template_key = TEMPLATES.get(template)
+        if template_key is None:
+            raise ValueError(f"알 수 없는 템플릿: '{template}' — 선택 가능: {list(TEMPLATES.keys())}")
 
         if template_key == "bizboard":
             img_bytes = composer.compose_bizboard(
@@ -259,9 +326,6 @@ def handle_submission(payload: dict):
                 object_image_url=image_url,
                 badge_text=badge,
             )
-        else:
-            slack.chat_postMessage(channel=channel_id, thread_ts=thread_ts, text="❌ 알 수 없는 템플릿입니다.")
-            return
 
         slack.files_upload_v2(
             channel=channel_id,
@@ -270,11 +334,23 @@ def handle_submission(payload: dict):
             filename=f"{template}.png",
             title=f"{template} | {title}",
         )
+        log.info("소재 생성 완료 — template=%s", template)
 
     except Exception as e:
-        slack.chat_postMessage(channel=channel_id, thread_ts=thread_ts, text=f"❌ 생성 실패: {e}")
+        log.error("소재 생성 실패: %s", e, exc_info=True)
+        slack.chat_postMessage(
+            channel=channel_id,
+            thread_ts=thread_ts,
+            text=f"❌ 생성 실패: {type(e).__name__}: {e}",
+        )
 
 
+# ─────────────────────────────────────────────
+# 헬스체크 — 필수 파일 상태도 함께 반환
+# ─────────────────────────────────────────────
 @app.get("/health")
 def health():
+    missing = _check_assets()
+    if missing:
+        return JSONResponse(status_code=500, content={"status": "error", "missing": missing})
     return {"status": "ok"}

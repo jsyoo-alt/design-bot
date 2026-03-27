@@ -79,6 +79,8 @@ def try_remove_background(img: Image.Image) -> tuple[Image.Image, bool]:
 
 
 def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"폰트 파일 없음: {path} — assets/fonts/ 폴더에 파일을 넣고 git push 하세요.")
     return ImageFont.truetype(path, size)
 
 
@@ -148,8 +150,6 @@ def compose_bizboard(
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    # 좌측 영역 (0 ~ 514px)
-    LEFT_END = 514
     LEFT_PADDING = 40
 
     sub_bbox = draw.textbbox((0, 0), sub_l, font=font_sub)

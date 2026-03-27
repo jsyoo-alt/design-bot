@@ -5,8 +5,10 @@
 
 import os
 import io
+import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont
+from rembg import remove as rembg_remove
 from config import BACKGROUNDS_DIR, FONTS_DIR
 
 # 카카오 비즈보드 공식 스펙
@@ -34,6 +36,44 @@ COLOR_BADGE_TEXT = "#FFFFFF"
 # 오브제 이미지 영역
 OBJECT_AREA_W = 315
 OBJECT_AREA_H = 258
+
+
+# ─────────────────────────────────────────────
+# 누끼 제거 + 품질 체크
+# ─────────────────────────────────────────────
+def _is_removal_successful(img: Image.Image) -> bool:
+    """
+    알파채널 픽셀 비율로 배경 제거 품질 판단.
+    투명 픽셀(alpha < 128)이 전체의 10~90% 범위일 때 성공으로 판단.
+    - 10% 미만: 배경이 거의 안 지워진 경우
+    - 90% 초과: 상품까지 같이 지워진 경우
+    """
+    if img.mode != "RGBA":
+        return False
+    alpha = np.array(img)[:, :, 3]
+    total = alpha.size
+    transparent = int(np.sum(alpha < 128))
+    ratio = transparent / total
+    return 0.10 <= ratio <= 0.90
+
+
+def try_remove_background(img: Image.Image) -> tuple[Image.Image, bool]:
+    """
+    rembg로 배경 제거 시도.
+    성공 여부를 함께 반환: (결과 이미지, 성공 여부)
+    실패하면 원본 이미지와 False 반환.
+    """
+    try:
+        buf_in = io.BytesIO()
+        img.save(buf_in, format="PNG")
+        buf_in.seek(0)
+        result_bytes = rembg_remove(buf_in.read())
+        result = Image.open(io.BytesIO(result_bytes)).convert("RGBA")
+        if _is_removal_successful(result):
+            return result, True
+        return img, False
+    except Exception:
+        return img, False
 
 
 def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
@@ -124,11 +164,20 @@ def compose_bizboard(
     _draw_text_centered(draw, sub_r, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
     _draw_text_centered(draw, title_r, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r + (sub_bbox_r[3] - sub_bbox_r[1]) + 8, RIGHT_TEXT_START, RIGHT_TEXT_END)
 
-    # 오브제 이미지 (우측 315x258)
+    # 오브제 이미지 (우측 315x258) — 누끼 시도 후 실패 시 썸네일로 폴백
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
-        _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
+        obj_img, removed = try_remove_background(obj_img)
+        if removed:
+            # 누끼 성공: 투명 배경 유지하며 비율 맞춰 배치
+            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
+            x_offset = CANVAS_SIZE[0] - OBJECT_AREA_W + (OBJECT_AREA_W - obj_img.width) // 2
+            y_offset = (OBJECT_AREA_H - obj_img.height) // 2
+            _paste_with_alpha(canvas, obj_img, (x_offset, y_offset))
+        else:
+            # 누끼 실패: 썸네일 방식(cover)으로 폴백
+            obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
+            _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
 
     return _export(canvas)
 
@@ -184,11 +233,20 @@ def compose_basic_2line_left_obj(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line_left.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 좌측 오브제 이미지 (315x258)
+    # 좌측 오브제 이미지 (315x258) — 누끼 시도 후 실패 시 썸네일로 폴백
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
-        _paste_with_alpha(canvas, obj_img, (0, 0))
+        obj_img, removed = try_remove_background(obj_img)
+        if removed:
+            # 누끼 성공: 투명 배경 유지하며 비율 맞춰 배치
+            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
+            x_offset = (OBJECT_AREA_W - obj_img.width) // 2
+            y_offset = (OBJECT_AREA_H - obj_img.height) // 2
+            _paste_with_alpha(canvas, obj_img, (x_offset, y_offset))
+        else:
+            # 누끼 실패: 썸네일 방식(cover)으로 폴백
+            obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
+            _paste_with_alpha(canvas, obj_img, (0, 0))
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)

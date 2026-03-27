@@ -4,3 +4,5 @@ slack-sdk==3.31.0
 pillow==10.4.0
 requests==2.32.3
 python-multipart==0.0.9
+rembg==2.0.57
+onnxruntime==1.19.2

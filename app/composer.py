@@ -5,10 +5,8 @@
 
 import os
 import io
-import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageFont
-from rembg import remove as rembg_remove
 from config import BACKGROUNDS_DIR, FONTS_DIR
 
 # 카카오 비즈보드 공식 스펙
@@ -50,6 +48,7 @@ def _is_removal_successful(img: Image.Image) -> bool:
     """
     if img.mode != "RGBA":
         return False
+    import numpy as np
     alpha = np.array(img)[:, :, 3]
     total = alpha.size
     transparent = int(np.sum(alpha < 128))
@@ -64,6 +63,9 @@ def try_remove_background(img: Image.Image) -> tuple[Image.Image, bool]:
     실패하면 원본 이미지와 False 반환.
     """
     try:
+        import numpy as np
+        from rembg import remove as rembg_remove  # 무거운 import를 실제 사용 시점에만 로드
+
         buf_in = io.BytesIO()
         img.save(buf_in, format="PNG")
         buf_in.seek(0)

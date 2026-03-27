@@ -83,7 +83,13 @@ def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
 
 
 def _download_image(url: str) -> Image.Image:
-    resp = requests.get(url, timeout=10)
+    headers = {}
+    if "slack.com" in url:
+        import os
+        token = os.environ.get("SLACK_BOT_TOKEN", "")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+    resp = requests.get(url, timeout=10, headers=headers)
     resp.raise_for_status()
     return Image.open(io.BytesIO(resp.content)).convert("RGBA")
 

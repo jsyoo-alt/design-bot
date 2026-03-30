@@ -16,9 +16,9 @@ CANVAS_SIZE = (1029, 258)
 FONT_BOLD = os.path.join(FONTS_DIR, "SpoqaHanSansNeo-Bold.ttf")
 FONT_REGULAR = os.path.join(FONTS_DIR, "SpoqaHanSansNeo-Regular.ttf")
 
-# pt → px 변환 (96dpi 기준)
+# pt → px 변환 (72dpi 기준, 1pt = 1px)
 def pt_to_px(pt: float) -> int:
-    return round(pt * 96 / 72)
+    return round(pt)
 
 # 공식 스펙 텍스트 크기 (pt → px)
 MAIN_COPY_SIZE = pt_to_px(48)   # 64px
@@ -31,9 +31,14 @@ COLOR_MAIN = "#4C4C4C"
 COLOR_SUB  = "#777777"
 COLOR_BADGE_TEXT = "#FFFFFF"
 
-# 오브제 이미지 영역
+# 오브제 이미지 영역 (오브젝트형)
 OBJECT_AREA_W = 315
 OBJECT_AREA_H = 258
+
+# 썸네일 박스형 영역
+THUMBNAIL_W = 315
+THUMBNAIL_H = 186
+THUMBNAIL_RADIUS = 8
 
 
 # ─────────────────────────────────────────────
@@ -143,6 +148,15 @@ def _draw_text_left(draw, text, font, color, x, y):
     draw.text((x, y), text, font=font, fill=color)
 
 
+def _round_corners(img: Image.Image, radius: int) -> Image.Image:
+    """이미지에 둥근 모서리 마스크 적용"""
+    img = img.convert("RGBA")
+    mask = Image.new("L", img.size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, img.width, img.height], radius=radius, fill=255)
+    img.putalpha(mask)
+    return img
+
+
 def _truncate_text(draw, text: str, font, max_width: int) -> str:
     """텍스트가 max_width를 초과하면 '...'을 붙여 잘라냄"""
     if draw.textlength(text, font=font) <= max_width:
@@ -214,18 +228,21 @@ def compose_basic_2line(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 오브제 이미지 (우측 315x258) — 썸네일 cover 방식
+    # 썸네일 박스형 (우측 315x186px, 세로 중앙, 둥근 모서리)
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
-        _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
+        obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
+        obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
+        thumb_x = CANVAS_SIZE[0] - THUMBNAIL_W
+        thumb_y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
+        _paste_with_alpha(canvas, obj_img, (thumb_x, thumb_y))
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
     TEXT_X = 40
-    TEXT_MAX_W = CANVAS_SIZE[0] - OBJECT_AREA_W - 33 - TEXT_X  # 오브제와 33px 간격 확보
+    TEXT_MAX_W = CANVAS_SIZE[0] - THUMBNAIL_W - 33 - TEXT_X  # 썸네일과 33px 간격 확보
     title = _truncate_text(draw, title, font_main, TEXT_MAX_W)
     sub = _truncate_text(draw, sub, font_sub, TEXT_MAX_W)
 
@@ -322,7 +339,6 @@ def _draw_badge(draw: ImageDraw.Draw, text: str, canvas: Image.Image, color: str
 
 
 def _export(canvas: Image.Image) -> bytes:
-    canvas_rgb = canvas.convert("RGB")
     buf = io.BytesIO()
-    canvas_rgb.save(buf, format="PNG", optimize=True)
+    canvas.save(buf, format="PNG", optimize=True)
     return buf.getvalue()

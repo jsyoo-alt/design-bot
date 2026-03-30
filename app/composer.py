@@ -197,7 +197,7 @@ def compose_bizboard(
 
     title_bbox = draw.textbbox((0, 0), title_l, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub_l, font=font_sub)
-    block_h = (title_bbox[3] - title_bbox[1]) + 8 + (sub_bbox[3] - sub_bbox[1])
+    block_h = (title_bbox[3] - title_bbox[1]) + 16 + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
     _draw_text_left(draw, title_l, font_main, COLOR_MAIN, LEFT_PADDING, y_start)
@@ -209,7 +209,7 @@ def compose_bizboard(
 
     title_bbox_r = draw.textbbox((0, 0), title_r, font=font_main)
     sub_bbox_r = draw.textbbox((0, 0), sub_r, font=font_sub)
-    block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + 8 + (sub_bbox_r[3] - sub_bbox_r[1])
+    block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + 16 + (sub_bbox_r[3] - sub_bbox_r[1])
     y_start_r = (CANVAS_SIZE[1] - block_h_r) // 2
 
     _draw_text_centered(draw, title_r, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
@@ -276,7 +276,7 @@ def compose_basic_2line(
 
     title_bbox = draw.textbbox((0, 0), title, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
-    block_h = (title_bbox[3] - title_bbox[1]) + 8 + (sub_bbox[3] - sub_bbox[1])
+    block_h = (title_bbox[3] - title_bbox[1]) + 16 + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
     _draw_text_left(draw, title, font_main, COLOR_MAIN, TEXT_X, y_start)
@@ -326,7 +326,7 @@ def compose_basic_2line_left_obj(
     TEXT_X = OBJECT_AREA_W + 50
     title_bbox = draw.textbbox((0, 0), title, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
-    block_h = (title_bbox[3] - title_bbox[1]) + 8 + (sub_bbox[3] - sub_bbox[1])
+    block_h = (title_bbox[3] - title_bbox[1]) + 16 + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
     _draw_text_left(draw, title, font_main, COLOR_MAIN, TEXT_X, y_start)

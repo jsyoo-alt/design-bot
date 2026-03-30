@@ -143,6 +143,15 @@ def _draw_text_left(draw, text, font, color, x, y):
     draw.text((x, y), text, font=font, fill=color)
 
 
+def _truncate_text(draw, text: str, font, max_width: int) -> str:
+    """텍스트가 max_width를 초과하면 '...'을 붙여 잘라냄"""
+    if draw.textlength(text, font=font) <= max_width:
+        return text
+    while text and draw.textlength(text + "...", font=font) > max_width:
+        text = text[:-1]
+    return text + "..."
+
+
 # ─────────────────────────────────────────────
 # 1. 비즈보드 (좌우 분리형)
 #    좌: sub_L + title_L  /  우: sub_R + title_R + 오브제 이미지
@@ -163,40 +172,31 @@ def compose_bizboard(
 
     LEFT_PADDING = 40
 
-    sub_bbox = draw.textbbox((0, 0), sub_l, font=font_sub)
     title_bbox = draw.textbbox((0, 0), title_l, font=font_main)
-    block_h = (sub_bbox[3] - sub_bbox[1]) + 8 + (title_bbox[3] - title_bbox[1])
+    sub_bbox = draw.textbbox((0, 0), sub_l, font=font_sub)
+    block_h = (title_bbox[3] - title_bbox[1]) + 8 + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
-    _draw_text_left(draw, sub_l, font_sub, COLOR_SUB, LEFT_PADDING, y_start)
-    _draw_text_left(draw, title_l, font_main, COLOR_MAIN, LEFT_PADDING, y_start + (sub_bbox[3] - sub_bbox[1]) + 8)
+    _draw_text_left(draw, title_l, font_main, COLOR_MAIN, LEFT_PADDING, y_start)
+    _draw_text_left(draw, sub_l, font_sub, COLOR_SUB, LEFT_PADDING, y_start + (title_bbox[3] - title_bbox[1]) + 8)
 
-    # 우측 텍스트 영역 (514 ~ 714px, 오브제 이미지 315px는 우측에 배치)
+    # 우측 텍스트 영역 (514 ~ 681px, 오브제 이미지와 33px 간격 확보)
     RIGHT_TEXT_START = 514
-    RIGHT_TEXT_END = CANVAS_SIZE[0] - OBJECT_AREA_W - 10
+    RIGHT_TEXT_END = CANVAS_SIZE[0] - OBJECT_AREA_W - 33
 
-    sub_bbox_r = draw.textbbox((0, 0), sub_r, font=font_sub)
     title_bbox_r = draw.textbbox((0, 0), title_r, font=font_main)
-    block_h_r = (sub_bbox_r[3] - sub_bbox_r[1]) + 8 + (title_bbox_r[3] - title_bbox_r[1])
+    sub_bbox_r = draw.textbbox((0, 0), sub_r, font=font_sub)
+    block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + 8 + (sub_bbox_r[3] - sub_bbox_r[1])
     y_start_r = (CANVAS_SIZE[1] - block_h_r) // 2
 
-    _draw_text_centered(draw, sub_r, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
-    _draw_text_centered(draw, title_r, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r + (sub_bbox_r[3] - sub_bbox_r[1]) + 8, RIGHT_TEXT_START, RIGHT_TEXT_END)
+    _draw_text_centered(draw, title_r, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
+    _draw_text_centered(draw, sub_r, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + 8, RIGHT_TEXT_START, RIGHT_TEXT_END)
 
-    # 오브제 이미지 (우측 315x258) — 누끼 시도 후 실패 시 썸네일로 폴백
+    # 오브제 이미지 (우측 315x258) — 썸네일 cover 방식
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img, removed = try_remove_background(obj_img)
-        if removed:
-            # 누끼 성공: 투명 배경 유지하며 비율 맞춰 배치
-            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x_offset = CANVAS_SIZE[0] - OBJECT_AREA_W + (OBJECT_AREA_W - obj_img.width) // 2
-            y_offset = (OBJECT_AREA_H - obj_img.height) // 2
-            _paste_with_alpha(canvas, obj_img, (x_offset, y_offset))
-        else:
-            # 누끼 실패: 썸네일 방식(cover)으로 폴백
-            obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
-            _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
+        obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
+        _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
 
     return _export(canvas)
 
@@ -214,31 +214,28 @@ def compose_basic_2line(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 오브제 이미지 (우측 315x258) — 누끼 시도 후 실패 시 썸네일로 폴백
+    # 오브제 이미지 (우측 315x258) — 썸네일 cover 방식
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img, removed = try_remove_background(obj_img)
-        if removed:
-            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x_offset = CANVAS_SIZE[0] - OBJECT_AREA_W + (OBJECT_AREA_W - obj_img.width) // 2
-            y_offset = (OBJECT_AREA_H - obj_img.height) // 2
-            _paste_with_alpha(canvas, obj_img, (x_offset, y_offset))
-        else:
-            obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
-            _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
+        obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
+        _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
     TEXT_X = 40
-    sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
+    TEXT_MAX_W = CANVAS_SIZE[0] - OBJECT_AREA_W - 33 - TEXT_X  # 오브제와 33px 간격 확보
+    title = _truncate_text(draw, title, font_main, TEXT_MAX_W)
+    sub = _truncate_text(draw, sub, font_sub, TEXT_MAX_W)
+
     title_bbox = draw.textbbox((0, 0), title, font=font_main)
-    block_h = (sub_bbox[3] - sub_bbox[1]) + 8 + (title_bbox[3] - title_bbox[1])
+    sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
+    block_h = (title_bbox[3] - title_bbox[1]) + 8 + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
-    _draw_text_left(draw, sub, font_sub, COLOR_SUB, TEXT_X, y_start)
-    _draw_text_left(draw, title, font_main, COLOR_MAIN, TEXT_X, y_start + (sub_bbox[3] - sub_bbox[1]) + 8)
+    _draw_text_left(draw, title, font_main, COLOR_MAIN, TEXT_X, y_start)
+    _draw_text_left(draw, sub, font_sub, COLOR_SUB, TEXT_X, y_start + (title_bbox[3] - title_bbox[1]) + 8)
 
     if badge_text:
         _draw_badge(draw, badge_text, canvas)
@@ -259,20 +256,11 @@ def compose_basic_2line_left_obj(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line_left.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 좌측 오브제 이미지 (315x258) — 누끼 시도 후 실패 시 썸네일로 폴백
+    # 좌측 오브제 이미지 (315x258) — 썸네일 cover 방식
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img, removed = try_remove_background(obj_img)
-        if removed:
-            # 누끼 성공: 투명 배경 유지하며 비율 맞춰 배치
-            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x_offset = (OBJECT_AREA_W - obj_img.width) // 2
-            y_offset = (OBJECT_AREA_H - obj_img.height) // 2
-            _paste_with_alpha(canvas, obj_img, (x_offset, y_offset))
-        else:
-            # 누끼 실패: 썸네일 방식(cover)으로 폴백
-            obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
-            _paste_with_alpha(canvas, obj_img, (0, 0))
+        obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
+        _paste_with_alpha(canvas, obj_img, (0, 0))
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
@@ -280,13 +268,13 @@ def compose_basic_2line_left_obj(
 
     # 우측 텍스트 영역: 가이드 기준 오브제-텍스트 간격 50px
     TEXT_X = OBJECT_AREA_W + 50
-    sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
     title_bbox = draw.textbbox((0, 0), title, font=font_main)
-    block_h = (sub_bbox[3] - sub_bbox[1]) + 8 + (title_bbox[3] - title_bbox[1])
+    sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
+    block_h = (title_bbox[3] - title_bbox[1]) + 8 + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
-    _draw_text_left(draw, sub, font_sub, COLOR_SUB, TEXT_X, y_start)
-    _draw_text_left(draw, title, font_main, COLOR_MAIN, TEXT_X, y_start + (sub_bbox[3] - sub_bbox[1]) + 8)
+    _draw_text_left(draw, title, font_main, COLOR_MAIN, TEXT_X, y_start)
+    _draw_text_left(draw, sub, font_sub, COLOR_SUB, TEXT_X, y_start + (title_bbox[3] - title_bbox[1]) + 8)
 
     if badge_text:
         _draw_badge(draw, badge_text, canvas)

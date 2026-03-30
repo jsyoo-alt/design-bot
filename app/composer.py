@@ -148,6 +148,15 @@ def _draw_text_left(draw, text, font, color, x, y):
     draw.text((x, y), text, font=font, fill=color)
 
 
+def _has_transparency(img: Image.Image, threshold: float = 0.05) -> bool:
+    """투명 픽셀(alpha < 128)이 threshold 비율 이상이면 누끼 이미지로 판단"""
+    if img.mode != "RGBA":
+        return False
+    alpha_data = img.getdata(band=3)
+    transparent = sum(1 for a in alpha_data if a < 128)
+    return transparent / len(alpha_data) >= threshold
+
+
 def _round_corners(img: Image.Image, radius: int) -> Image.Image:
     """이미지에 둥근 모서리 마스크 적용"""
     img = img.convert("RGBA")
@@ -206,11 +215,22 @@ def compose_bizboard(
     _draw_text_centered(draw, title_r, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
     _draw_text_centered(draw, sub_r, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + 8, RIGHT_TEXT_START, RIGHT_TEXT_END)
 
-    # 오브제 이미지 (우측 315x258) — 썸네일 cover 방식
+    # 오브제 이미지 (우측) — 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
-        _paste_with_alpha(canvas, obj_img, (CANVAS_SIZE[0] - OBJECT_AREA_W, 0))
+        if _has_transparency(obj_img):
+            # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
+            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
+            x = CANVAS_SIZE[0] - OBJECT_AREA_W + (OBJECT_AREA_W - obj_img.width) // 2
+            y = (OBJECT_AREA_H - obj_img.height) // 2
+            _paste_with_alpha(canvas, obj_img, (x, y))
+        else:
+            # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
+            obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
+            obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
+            x = CANVAS_SIZE[0] - THUMBNAIL_W
+            y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
+            _paste_with_alpha(canvas, obj_img, (x, y))
 
     return _export(canvas)
 
@@ -228,14 +248,22 @@ def compose_basic_2line(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 썸네일 박스형 (우측 315x186px, 세로 중앙, 둥근 모서리)
+    # 오브제 이미지 (우측) — 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
-        obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
-        thumb_x = CANVAS_SIZE[0] - THUMBNAIL_W
-        thumb_y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
-        _paste_with_alpha(canvas, obj_img, (thumb_x, thumb_y))
+        if _has_transparency(obj_img):
+            # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
+            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
+            x = CANVAS_SIZE[0] - OBJECT_AREA_W + (OBJECT_AREA_W - obj_img.width) // 2
+            y = (OBJECT_AREA_H - obj_img.height) // 2
+            _paste_with_alpha(canvas, obj_img, (x, y))
+        else:
+            # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
+            obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
+            obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
+            x = CANVAS_SIZE[0] - THUMBNAIL_W
+            y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
+            _paste_with_alpha(canvas, obj_img, (x, y))
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
@@ -273,11 +301,22 @@ def compose_basic_2line_left_obj(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line_left.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 좌측 오브제 이미지 (315x258) — 썸네일 cover 방식
+    # 좌측 오브제 이미지 — 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
     if object_image_url:
         obj_img = _download_image(object_image_url)
-        obj_img = _fit_image(obj_img, OBJECT_AREA_W, OBJECT_AREA_H)
-        _paste_with_alpha(canvas, obj_img, (0, 0))
+        if _has_transparency(obj_img):
+            # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
+            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
+            x = (OBJECT_AREA_W - obj_img.width) // 2
+            y = (OBJECT_AREA_H - obj_img.height) // 2
+            _paste_with_alpha(canvas, obj_img, (x, y))
+        else:
+            # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
+            obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
+            obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
+            x = 0
+            y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
+            _paste_with_alpha(canvas, obj_img, (x, y))
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)

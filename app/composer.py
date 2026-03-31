@@ -40,6 +40,12 @@ THUMBNAIL_W = 315
 THUMBNAIL_H = 186
 THUMBNAIL_RADIUS = 8
 
+# 레이아웃 공통 규칙
+MARGIN  = 48   # 양쪽 끝 투명 공백
+OBJ_GAP = 33   # 카피-오브젝트 최소 간격 (3개 형태 동일)
+TEXT_MIN_W = 290  # 두 줄 중 최소 한 줄은 이 이상이어야 함
+TEXT_MAX_W = 585  # 텍스트 최대 길이
+
 
 # ─────────────────────────────────────────────
 # 누끼 제거 + 품질 체크
@@ -193,7 +199,17 @@ def compose_bizboard(
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    LEFT_PADDING = 40
+    # 이미지 중앙 배치: 캔버스 정중앙 기준
+    # 이미지 영역(315px)이 캔버스 중앙(514px)에 오도록
+    OBJ_X = (CANVAS_SIZE[0] - OBJECT_AREA_W) // 2  # (1029 - 315) // 2 = 357
+    OBJ_X_END = OBJ_X + OBJECT_AREA_W              # 357 + 315 = 672
+
+    # 좌측 텍스트: MARGIN(48) ~ 이미지 시작 - OBJ_GAP(33)
+    LEFT_PADDING = MARGIN  # 48
+    LEFT_TEXT_END = OBJ_X - OBJ_GAP                # 357 - 33 = 324
+    left_max_w = LEFT_TEXT_END - LEFT_PADDING       # 324 - 48 = 276
+    title_l = _truncate_text(draw, title_l, font_main, left_max_w)
+    sub_l = _truncate_text(draw, sub_l, font_sub, left_max_w)
 
     title_bbox = draw.textbbox((0, 0), title_l, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub_l, font=font_sub)
@@ -203,32 +219,35 @@ def compose_bizboard(
     _draw_text_left(draw, title_l, font_main, COLOR_MAIN, LEFT_PADDING, y_start)
     _draw_text_left(draw, sub_l, font_sub, COLOR_SUB, LEFT_PADDING, y_start + (title_bbox[3] - title_bbox[1]) + 8)
 
-    # 우측 텍스트 영역 (514 ~ 681px, 오브제 이미지와 33px 간격 확보)
-    RIGHT_TEXT_START = 514
-    RIGHT_TEXT_END = CANVAS_SIZE[0] - OBJECT_AREA_W - 33
+    # 우측 텍스트: 이미지 끝 + OBJ_GAP(33) ~ CANVAS - MARGIN(48)
+    RIGHT_TEXT_START = OBJ_X_END + OBJ_GAP         # 672 + 33 = 705
+    RIGHT_TEXT_END = CANVAS_SIZE[0] - MARGIN        # 1029 - 48 = 981
+    right_max_w = RIGHT_TEXT_END - RIGHT_TEXT_START # 981 - 705 = 276
+    title_r_t = _truncate_text(draw, title_r, font_main, right_max_w)
+    sub_r_t = _truncate_text(draw, sub_r, font_sub, right_max_w)
 
-    title_bbox_r = draw.textbbox((0, 0), title_r, font=font_main)
-    sub_bbox_r = draw.textbbox((0, 0), sub_r, font=font_sub)
+    title_bbox_r = draw.textbbox((0, 0), title_r_t, font=font_main)
+    sub_bbox_r = draw.textbbox((0, 0), sub_r_t, font=font_sub)
     block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + 16 + (sub_bbox_r[3] - sub_bbox_r[1])
     y_start_r = (CANVAS_SIZE[1] - block_h_r) // 2
 
-    _draw_text_centered(draw, title_r, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
-    _draw_text_centered(draw, sub_r, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + 8, RIGHT_TEXT_START, RIGHT_TEXT_END)
+    _draw_text_centered(draw, title_r_t, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
+    _draw_text_centered(draw, sub_r_t, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + 8, RIGHT_TEXT_START, RIGHT_TEXT_END)
 
-    # 오브제 이미지 (우측) — 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
+    # 오브제 이미지 — 캔버스 정중앙, 세로 중앙
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
             # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
             obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x = CANVAS_SIZE[0] - OBJECT_AREA_W + (OBJECT_AREA_W - obj_img.width) // 2
-            y = (OBJECT_AREA_H - obj_img.height) // 2
+            x = OBJ_X + (OBJECT_AREA_W - obj_img.width) // 2
+            y = (CANVAS_SIZE[1] - obj_img.height) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
         else:
             # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
             obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
             obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
-            x = CANVAS_SIZE[0] - THUMBNAIL_W
+            x = OBJ_X
             y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
 
@@ -248,20 +267,21 @@ def compose_basic_2line(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 오브제 이미지 (우측) — 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
+    # 오브제 이미지 (우측 MARGIN 여백 확보) — 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
+    OBJ_X = CANVAS_SIZE[0] - OBJECT_AREA_W - MARGIN  # 1029 - 315 - 48 = 666
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
             # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
             obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x = CANVAS_SIZE[0] - OBJECT_AREA_W + (OBJECT_AREA_W - obj_img.width) // 2
-            y = (OBJECT_AREA_H - obj_img.height) // 2
+            x = OBJ_X + (OBJECT_AREA_W - obj_img.width) // 2
+            y = (CANVAS_SIZE[1] - obj_img.height) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
         else:
             # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
             obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
             obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
-            x = CANVAS_SIZE[0] - THUMBNAIL_W
+            x = OBJ_X
             y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
 
@@ -269,10 +289,10 @@ def compose_basic_2line(
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    TEXT_X = 40
-    TEXT_MAX_W = CANVAS_SIZE[0] - THUMBNAIL_W - 33 - TEXT_X  # 썸네일과 33px 간격 확보
-    title = _truncate_text(draw, title, font_main, TEXT_MAX_W)
-    sub = _truncate_text(draw, sub, font_sub, TEXT_MAX_W)
+    TEXT_X = MARGIN  # 48px
+    text_max_w = (OBJ_X - OBJ_GAP - TEXT_X) if object_image_url else (CANVAS_SIZE[0] - MARGIN - TEXT_X)
+    title = _truncate_text(draw, title, font_main, text_max_w)
+    sub = _truncate_text(draw, sub, font_sub, text_max_w)
 
     title_bbox = draw.textbbox((0, 0), title, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
@@ -301,20 +321,21 @@ def compose_basic_2line_left_obj(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line_left.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 좌측 오브제 이미지 — 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
+    # 좌측 오브제 이미지 — 좌측 MARGIN(48) 여백 확보, 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
+    OBJ_LEFT = MARGIN  # 48px
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
             # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
             obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x = (OBJECT_AREA_W - obj_img.width) // 2
-            y = (OBJECT_AREA_H - obj_img.height) // 2
+            x = OBJ_LEFT + (OBJECT_AREA_W - obj_img.width) // 2
+            y = (CANVAS_SIZE[1] - obj_img.height) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
         else:
             # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
             obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
             obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
-            x = 0
+            x = OBJ_LEFT
             y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
 
@@ -322,8 +343,12 @@ def compose_basic_2line_left_obj(
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    # 우측 텍스트 영역: 가이드 기준 오브제-텍스트 간격 50px
-    TEXT_X = OBJECT_AREA_W + 50
+    # 우측 텍스트: 이미지 우측 끝 + OBJ_GAP(33), 우측도 MARGIN(48) 확보
+    TEXT_X = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP  # 48 + 315 + 33 = 396
+    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X  # 1029 - 48 - 396 = 585
+    title = _truncate_text(draw, title, font_main, text_max_w)
+    sub = _truncate_text(draw, sub, font_sub, text_max_w)
+
     title_bbox = draw.textbbox((0, 0), title, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
     block_h = (title_bbox[3] - title_bbox[1]) + 16 + (sub_bbox[3] - sub_bbox[1])

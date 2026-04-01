@@ -216,8 +216,8 @@ def compose_bizboard(
     block_h = (title_bbox[3] - title_bbox[1]) + 16 + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
-    _draw_text_left(draw, title_l, font_main, COLOR_MAIN, LEFT_PADDING, y_start)
-    _draw_text_left(draw, sub_l, font_sub, COLOR_SUB, LEFT_PADDING, y_start + (title_bbox[3] - title_bbox[1]) + 8)
+    _draw_text_centered(draw, title_l, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start, LEFT_PADDING, LEFT_TEXT_END)
+    _draw_text_centered(draw, sub_l, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start + (title_bbox[3] - title_bbox[1]) + 8, LEFT_PADDING, LEFT_TEXT_END)
 
     # 우측 텍스트: 이미지 끝 + OBJ_GAP(33) ~ CANVAS - MARGIN(48)
     RIGHT_TEXT_START = OBJ_X_END + OBJ_GAP         # 672 + 33 = 705

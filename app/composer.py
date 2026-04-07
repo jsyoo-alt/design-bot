@@ -40,6 +40,12 @@ THUMBNAIL_W = 315
 THUMBNAIL_H = 186
 THUMBNAIL_RADIUS = 8
 
+# 로고 고정영역 (썸네일 우상단)
+LOGO_PATH = os.path.join(BACKGROUNDS_DIR, "logo.png")
+LOGO_MAX_W = 120
+LOGO_MAX_H = 46
+LOGO_MARGIN = 8
+
 # 레이아웃 공통 규칙
 MARGIN  = 48   # 양쪽 끝 투명 공백
 OBJ_GAP = 33   # 카피-오브젝트 최소 간격 (3개 형태 동일)
@@ -163,6 +169,17 @@ def _has_transparency(img: Image.Image, threshold: float = 0.05) -> bool:
     return transparent / len(alpha_data) >= threshold
 
 
+def _paste_logo_on_thumbnail(canvas: Image.Image, thumb_x: int, thumb_y: int):
+    """썸네일 박스 우상단에 로고 합성 (120x46 영역 내 contain fit, 여백 8px)"""
+    if not os.path.exists(LOGO_PATH):
+        return
+    logo = Image.open(LOGO_PATH).convert("RGBA")
+    logo.thumbnail((LOGO_MAX_W, LOGO_MAX_H), Image.LANCZOS)
+    x = thumb_x + THUMBNAIL_W - LOGO_MARGIN - logo.width
+    y = thumb_y + LOGO_MARGIN
+    _paste_with_alpha(canvas, logo, (x, y))
+
+
 def _round_corners(img: Image.Image, radius: int) -> Image.Image:
     """이미지에 둥근 모서리 마스크 적용"""
     img = img.convert("RGBA")
@@ -284,6 +301,7 @@ def compose_basic_2line(
             x = OBJ_X
             y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
+            _paste_logo_on_thumbnail(canvas, x, y)
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
@@ -338,6 +356,7 @@ def compose_basic_2line_left_obj(
             x = OBJ_LEFT
             y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
+            _paste_logo_on_thumbnail(canvas, x, y)
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)

@@ -45,6 +45,32 @@ LOGO_PATH = os.path.join(BACKGROUNDS_DIR, "logo.png")
 LOGO_MAX_W = 120
 LOGO_MAX_H = 46
 LOGO_MARGIN = 8
+LOGO_Y = 20  # 배너 상단 로고 Y 위치
+
+# 신규 썸네일 영역 스펙 (피그마 실측)
+THUMB_FRAME_X = 652
+THUMB_FRAME_Y = 36
+THUMB_FRAME_W = 308
+THUMB_FRAME_H = 186
+THUMB_FRAME_R = 12
+
+# 앱 바 스펙 (앱다운로드형)
+APP_BAR_PATH   = os.path.join(BACKGROUNDS_DIR, "app_bar.png")
+APP_BAR_X      = 49
+APP_BAR_Y      = 43
+APP_CONTENT_Y  = 90   # 앱 바 하단 이후 텍스트 배치 기준 Y
+
+# 인라인 배지 스펙 (텍스트강조형)
+INLINE_BADGE_W   = 77
+INLINE_BADGE_H   = 42
+INLINE_BADGE_R   = 8
+INLINE_BADGE_GAP = 14
+INLINE_BADGE_COL = "#FF6600"
+
+# 좌측 텍스트 기준 X (피그마 실측)
+TEXT_L_X = 51
+# 우측 로고 기준 (캔버스 우측에서 52px 여백)
+LOGO_RIGHT_MARGIN = 52
 
 # 레이아웃 공통 규칙
 MARGIN  = 48   # 양쪽 끝 투명 공백
@@ -425,3 +451,367 @@ def _export(canvas: Image.Image) -> bytes:
     buf = io.BytesIO()
     canvas.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
+
+
+# ─────────────────────────────────────────────
+# 신규 헬퍼 함수
+# ─────────────────────────────────────────────
+
+def _paste_banner_logo(canvas: Image.Image, right: bool = False):
+    """배너 상단 좌측(기본) 또는 우측에 29CM 로고 배치"""
+    if not os.path.exists(LOGO_PATH):
+        return
+    logo = Image.open(LOGO_PATH).convert("RGBA")
+    logo.thumbnail((LOGO_MAX_W, LOGO_MAX_H), Image.LANCZOS)
+    x = (CANVAS_SIZE[0] - LOGO_RIGHT_MARGIN - logo.width) if right else TEXT_L_X
+    _paste_with_alpha(canvas, logo, (x, LOGO_Y))
+
+
+def _paste_thumb_area(canvas: Image.Image, img: Image.Image,
+                      x: int, y: int, w: int, h: int):
+    """지정 영역에 상품 이미지 배치 (누끼/일반 자동 분기, 로고 미포함)"""
+    if _has_transparency(img):
+        img.thumbnail((w, h), Image.LANCZOS)
+        px = x + (w - img.width) // 2
+        py = y + (h - img.height) // 2
+        _paste_with_alpha(canvas, img, (px, py))
+    else:
+        fitted = _fit_image(img, w, h)
+        fitted = _round_corners(fitted, THUMB_FRAME_R)
+        _paste_with_alpha(canvas, fitted, (x, y))
+
+
+def _text_block_y(
+    draw: ImageDraw.ImageDraw,
+    main: str, sub: str,
+    font_m: ImageFont.FreeTypeFont,
+    font_s: ImageFont.FreeTypeFont,
+    y_min: int = 0,
+) -> tuple[int, int]:
+    """(main_y, sub_y): y_min 아래 구간에서 텍스트 블록 세로 중앙 정렬"""
+    m_h = draw.textbbox((0, 0), main, font=font_m)[3] - draw.textbbox((0, 0), main, font=font_m)[1]
+    s_h = draw.textbbox((0, 0), sub,  font=font_s)[3] - draw.textbbox((0, 0), sub,  font=font_s)[1]
+    block_h = m_h + 16 + s_h
+    y_start = y_min + (CANVAS_SIZE[1] - y_min - block_h) // 2
+    return y_start, y_start + m_h + 16
+
+
+def _draw_inline_badge_line(
+    draw: ImageDraw.ImageDraw,
+    badge_text: str | None,
+    sub: str,
+    font_b: ImageFont.FreeTypeFont,
+    font_s: ImageFont.FreeTypeFont,
+    text_x: int,
+    line_y: int,
+    pill: bool = True,
+):
+    """인라인 배지(pill 또는 컬러 텍스트) + 서브 카피 한 줄 렌더링
+    pill=True  → 오렌지 pill 안에 badge_text, 우측에 sub_copy
+    pill=False → badge_text를 오렌지 plain 텍스트로, 이어서 sub_copy
+    """
+    if not badge_text:
+        draw.text((text_x, line_y), sub, font=font_s, fill=COLOR_SUB)
+        return
+
+    if pill:
+        draw.rounded_rectangle(
+            [text_x, line_y, text_x + INLINE_BADGE_W, line_y + INLINE_BADGE_H],
+            radius=INLINE_BADGE_R,
+            fill=INLINE_BADGE_COL,
+        )
+        b_bbox = draw.textbbox((0, 0), badge_text, font=font_b)
+        b_w = b_bbox[2] - b_bbox[0]
+        b_h = b_bbox[3] - b_bbox[1]
+        bx = text_x + (INLINE_BADGE_W - b_w) // 2
+        by = line_y + (INLINE_BADGE_H - b_h) // 2
+        draw.text((bx, by), badge_text, font=font_b, fill=COLOR_BADGE_TEXT)
+
+        sub_x = text_x + INLINE_BADGE_W + INLINE_BADGE_GAP
+        s_h = draw.textbbox((0, 0), sub, font=font_s)[3] - draw.textbbox((0, 0), sub, font=font_s)[1]
+        sub_y = line_y + (INLINE_BADGE_H - s_h) // 2
+        draw.text((sub_x, sub_y), sub, font=font_s, fill=COLOR_SUB)
+    else:
+        b_w = int(draw.textlength(badge_text + " ", font=font_s))
+        draw.text((text_x, line_y), badge_text, font=font_s, fill=INLINE_BADGE_COL)
+        draw.text((text_x + b_w, line_y), sub, font=font_s, fill=COLOR_SUB)
+
+
+# ─────────────────────────────────────────────
+# 4. 썸네일형
+#    로고(좌상단) + 좌측 카피 + 우측 썸네일 이미지
+# ─────────────────────────────────────────────
+def compose_thumbnail(
+    title: str,
+    sub: str,
+    object_image_url: str | None = None,
+) -> bytes:
+    canvas = Image.open(os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")).convert("RGBA").resize(CANVAS_SIZE)
+
+    _paste_banner_logo(canvas)
+
+    if object_image_url:
+        obj_img = _download_image(object_image_url)
+        _paste_thumb_area(canvas, obj_img, THUMB_FRAME_X, THUMB_FRAME_Y, THUMB_FRAME_W, THUMB_FRAME_H)
+
+    draw = ImageDraw.Draw(canvas)
+    font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
+    font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
+
+    max_w = (THUMB_FRAME_X - OBJ_GAP - TEXT_L_X) if object_image_url else (CANVAS_SIZE[0] - MARGIN - TEXT_L_X)
+    title = _truncate_text(draw, title, font_m, max_w)
+    sub   = _truncate_text(draw, sub,   font_s, max_w)
+
+    main_y, sub_y = _text_block_y(draw, title, sub, font_m, font_s)
+    _draw_text_left(draw, title, font_m, COLOR_MAIN, TEXT_L_X, main_y)
+    _draw_text_left(draw, sub,   font_s, COLOR_SUB,  TEXT_L_X, sub_y)
+
+    return _export(canvas)
+
+
+# ─────────────────────────────────────────────
+# 5. 기본_2줄형_좌측 오브제+뱃지
+#    로고(좌상단) + 좌측 오브제 + 우측 카피 + 코너 배지
+# ─────────────────────────────────────────────
+def compose_basic_2line_left_badge(
+    title: str,
+    sub: str,
+    object_image_url: str | None = None,
+    badge_text: str | None = None,
+) -> bytes:
+    canvas = Image.open(os.path.join(BACKGROUNDS_DIR, "bg_basic_2line_left.png")).convert("RGBA").resize(CANVAS_SIZE)
+
+    _paste_banner_logo(canvas)
+
+    OBJ_LEFT = MARGIN
+    if object_image_url:
+        obj_img = _download_image(object_image_url)
+        if _has_transparency(obj_img):
+            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
+            x = OBJ_LEFT + (OBJECT_AREA_W - obj_img.width) // 2
+            y = (CANVAS_SIZE[1] - obj_img.height) // 2
+            _paste_with_alpha(canvas, obj_img, (x, y))
+        else:
+            obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
+            obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
+            x, y = OBJ_LEFT, (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
+            _paste_with_alpha(canvas, obj_img, (x, y))
+
+    draw = ImageDraw.Draw(canvas)
+    font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
+    font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
+
+    TEXT_X    = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP
+    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X
+    title = _truncate_text(draw, title, font_m, text_max_w)
+    sub   = _truncate_text(draw, sub,   font_s, text_max_w)
+
+    main_y, sub_y = _text_block_y(draw, title, sub, font_m, font_s)
+    _draw_text_left(draw, title, font_m, COLOR_MAIN, TEXT_X, main_y)
+    _draw_text_left(draw, sub,   font_s, COLOR_SUB,  TEXT_X, sub_y)
+
+    if badge_text:
+        _draw_badge(draw, badge_text, canvas)
+
+    return _export(canvas)
+
+
+# ─────────────────────────────────────────────
+# 6. 앱다운로드형
+#    앱 바 + 카피 (이미지 없음)
+# ─────────────────────────────────────────────
+def compose_app_download(
+    title: str,
+    sub: str,
+) -> bytes:
+    canvas = Image.open(os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")).convert("RGBA").resize(CANVAS_SIZE)
+
+    if os.path.exists(APP_BAR_PATH):
+        app_bar = Image.open(APP_BAR_PATH).convert("RGBA")
+        _paste_with_alpha(canvas, app_bar, (APP_BAR_X, APP_BAR_Y))
+
+    draw = ImageDraw.Draw(canvas)
+    font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
+    font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
+
+    max_w = CANVAS_SIZE[0] - MARGIN * 2
+    title = _truncate_text(draw, title, font_m, max_w)
+    sub   = _truncate_text(draw, sub,   font_s, max_w)
+
+    main_y, sub_y = _text_block_y(draw, title, sub, font_m, font_s, y_min=APP_CONTENT_Y)
+    _draw_text_left(draw, title, font_m, COLOR_MAIN, MARGIN, main_y)
+    _draw_text_left(draw, sub,   font_s, COLOR_SUB,  MARGIN, sub_y)
+
+    return _export(canvas)
+
+
+# ─────────────────────────────────────────────
+# 7. 앱다운로드+썸네일형
+#    앱 바 + 카피 + 우측 썸네일
+# ─────────────────────────────────────────────
+def compose_app_download_thumbnail(
+    title: str,
+    sub: str,
+    object_image_url: str | None = None,
+) -> bytes:
+    canvas = Image.open(os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")).convert("RGBA").resize(CANVAS_SIZE)
+
+    if os.path.exists(APP_BAR_PATH):
+        app_bar = Image.open(APP_BAR_PATH).convert("RGBA")
+        _paste_with_alpha(canvas, app_bar, (APP_BAR_X, APP_BAR_Y))
+
+    if object_image_url:
+        obj_img = _download_image(object_image_url)
+        _paste_thumb_area(canvas, obj_img, THUMB_FRAME_X, THUMB_FRAME_Y, THUMB_FRAME_W, THUMB_FRAME_H)
+
+    draw = ImageDraw.Draw(canvas)
+    font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
+    font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
+
+    max_w = (THUMB_FRAME_X - OBJ_GAP - MARGIN) if object_image_url else (CANVAS_SIZE[0] - MARGIN * 2)
+    title = _truncate_text(draw, title, font_m, max_w)
+    sub   = _truncate_text(draw, sub,   font_s, max_w)
+
+    main_y, sub_y = _text_block_y(draw, title, sub, font_m, font_s, y_min=APP_CONTENT_Y)
+    _draw_text_left(draw, title, font_m, COLOR_MAIN, MARGIN, main_y)
+    _draw_text_left(draw, sub,   font_s, COLOR_SUB,  MARGIN, sub_y)
+
+    return _export(canvas)
+
+
+# ─────────────────────────────────────────────
+# 8. 텍스트강조+썸네일형 (배지 pill)
+#    로고(좌상단) + 메인 카피 + 오렌지 pill 배지 + 서브 카피 + 우측 썸네일
+# ─────────────────────────────────────────────
+def compose_text_highlight_thumbnail(
+    title: str,
+    sub: str,
+    object_image_url: str | None = None,
+    badge_text: str | None = None,
+) -> bytes:
+    canvas = Image.open(os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")).convert("RGBA").resize(CANVAS_SIZE)
+
+    _paste_banner_logo(canvas)
+
+    if object_image_url:
+        obj_img = _download_image(object_image_url)
+        _paste_thumb_area(canvas, obj_img, THUMB_FRAME_X, THUMB_FRAME_Y, THUMB_FRAME_W, THUMB_FRAME_H)
+
+    draw = ImageDraw.Draw(canvas)
+    font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
+    font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
+    font_b = _load_font(FONT_BOLD, BADGE_SIZE_1)
+
+    max_w_m = (THUMB_FRAME_X - OBJ_GAP - TEXT_L_X) if object_image_url else (CANVAS_SIZE[0] - MARGIN - TEXT_L_X)
+    title = _truncate_text(draw, title, font_m, max_w_m)
+    max_w_s = (max_w_m - INLINE_BADGE_W - INLINE_BADGE_GAP) if badge_text else max_w_m
+    sub = _truncate_text(draw, sub, font_s, max_w_s)
+
+    m_h = draw.textbbox((0, 0), title, font=font_m)[3] - draw.textbbox((0, 0), title, font=font_m)[1]
+    badge_line_h = INLINE_BADGE_H if badge_text else (
+        draw.textbbox((0, 0), sub, font=font_s)[3] - draw.textbbox((0, 0), sub, font=font_s)[1])
+    block_h = m_h + 16 + badge_line_h
+    main_y  = (CANVAS_SIZE[1] - block_h) // 2
+    badge_y = main_y + m_h + 16
+
+    _draw_text_left(draw, title, font_m, COLOR_MAIN, TEXT_L_X, main_y)
+    _draw_inline_badge_line(draw, badge_text, sub, font_b, font_s, TEXT_L_X, badge_y, pill=True)
+
+    return _export(canvas)
+
+
+# ─────────────────────────────────────────────
+# 9. 텍스트강조형 (배지 pill, 이미지 없음)
+#    로고(우상단) + 메인 카피 + 오렌지 pill 배지 + 서브 카피
+# ─────────────────────────────────────────────
+def compose_text_highlight(
+    title: str,
+    sub: str,
+    badge_text: str | None = None,
+) -> bytes:
+    canvas = Image.open(os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")).convert("RGBA").resize(CANVAS_SIZE)
+
+    _paste_banner_logo(canvas, right=True)
+
+    draw = ImageDraw.Draw(canvas)
+    font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
+    font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
+    font_b = _load_font(FONT_BOLD, BADGE_SIZE_1)
+
+    max_w = CANVAS_SIZE[0] - MARGIN - TEXT_L_X
+    title = _truncate_text(draw, title, font_m, max_w)
+    max_w_s = (max_w - INLINE_BADGE_W - INLINE_BADGE_GAP) if badge_text else max_w
+    sub = _truncate_text(draw, sub, font_s, max_w_s)
+
+    m_h = draw.textbbox((0, 0), title, font=font_m)[3] - draw.textbbox((0, 0), title, font=font_m)[1]
+    badge_line_h = INLINE_BADGE_H if badge_text else (
+        draw.textbbox((0, 0), sub, font=font_s)[3] - draw.textbbox((0, 0), sub, font=font_s)[1])
+    block_h = m_h + 16 + badge_line_h
+    main_y  = (CANVAS_SIZE[1] - block_h) // 2
+    badge_y = main_y + m_h + 16
+
+    _draw_text_left(draw, title, font_m, COLOR_MAIN, TEXT_L_X, main_y)
+    _draw_inline_badge_line(draw, badge_text, sub, font_b, font_s, TEXT_L_X, badge_y, pill=True)
+
+    return _export(canvas)
+
+
+# ─────────────────────────────────────────────
+# 10. 텍스트강조+썸네일형 v2 (컬러 프리픽스)
+#     로고(좌상단) + 메인 카피 + 오렌지 텍스트+서브 카피 + 우측 썸네일
+# ─────────────────────────────────────────────
+def compose_text_highlight_v2_thumbnail(
+    title: str,
+    sub: str,
+    object_image_url: str | None = None,
+    badge_text: str | None = None,
+) -> bytes:
+    canvas = Image.open(os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")).convert("RGBA").resize(CANVAS_SIZE)
+
+    _paste_banner_logo(canvas)
+
+    if object_image_url:
+        obj_img = _download_image(object_image_url)
+        _paste_thumb_area(canvas, obj_img, THUMB_FRAME_X, THUMB_FRAME_Y, THUMB_FRAME_W, THUMB_FRAME_H)
+
+    draw = ImageDraw.Draw(canvas)
+    font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
+    font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
+
+    max_w = (THUMB_FRAME_X - OBJ_GAP - TEXT_L_X) if object_image_url else (CANVAS_SIZE[0] - MARGIN - TEXT_L_X)
+    title = _truncate_text(draw, title, font_m, max_w)
+    sub   = _truncate_text(draw, sub,   font_s, max_w)
+
+    main_y, sub_y = _text_block_y(draw, title, sub, font_m, font_s)
+    _draw_text_left(draw, title, font_m, COLOR_MAIN, TEXT_L_X, main_y)
+    _draw_inline_badge_line(draw, badge_text, sub, font_s, font_s, TEXT_L_X, sub_y, pill=False)
+
+    return _export(canvas)
+
+
+# ─────────────────────────────────────────────
+# 11. 텍스트강조형 v2 (컬러 프리픽스, 이미지 없음)
+#     로고(우상단) + 메인 카피 + 오렌지 텍스트+서브 카피
+# ─────────────────────────────────────────────
+def compose_text_highlight_v2(
+    title: str,
+    sub: str,
+    badge_text: str | None = None,
+) -> bytes:
+    canvas = Image.open(os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")).convert("RGBA").resize(CANVAS_SIZE)
+
+    _paste_banner_logo(canvas, right=True)
+
+    draw = ImageDraw.Draw(canvas)
+    font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
+    font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
+
+    max_w = CANVAS_SIZE[0] - MARGIN - TEXT_L_X
+    title = _truncate_text(draw, title, font_m, max_w)
+    sub   = _truncate_text(draw, sub,   font_s, max_w)
+
+    main_y, sub_y = _text_block_y(draw, title, sub, font_m, font_s)
+    _draw_text_left(draw, title, font_m, COLOR_MAIN, TEXT_L_X, main_y)
+    _draw_inline_badge_line(draw, badge_text, sub, font_s, font_s, TEXT_L_X, sub_y, pill=False)
+
+    return _export(canvas)

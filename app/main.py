@@ -70,9 +70,10 @@ async def lifespan(application: FastAPI):
     else:
         log.info("[STARTUP] 모든 필수 파일 확인 완료")
 
-    # rembg 모델 워밍업 (첫 요청 지연 ~10초 방지)
+    # rembg 모델 워밍업 — 백그라운드에서 실행해 서버 시작을 차단하지 않음
+    import threading
     from app.rembg_utils import warmup
-    warmup()
+    threading.Thread(target=warmup, daemon=True).start()
 
     yield
 

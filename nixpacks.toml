@@ -3,6 +3,7 @@
 
 [phases.setup]
 nixPkgs = [
+  "python311",
   "nodejs_20",
   # Puppeteer Chromium 의존 라이브러리
   "nss", "nspr", "atk", "cups", "pango", "cairo",
@@ -15,7 +16,7 @@ nixPkgs = [
 
 [phases.install]
 cmds = [
-  "pip install -r requirements.txt",
+  "python3 -m pip install -r requirements.txt",
   "npm install",
 ]
 

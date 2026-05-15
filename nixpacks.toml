@@ -1,13 +1,10 @@
 # Railway nixpacks 빌드 설정
 # Python(FastAPI) + Node.js(Puppeteer) 혼합 환경
-
-# Railway nixpacks 빌드 설정
-# [phases.setup] 오버라이드 시 Python 자동감지가 꺼지므로 명시 필요
+# python311.withPackages: pip을 Python 인터프리터에 내장 (별도 패키지는 -m pip 못 찾음)
 
 [phases.setup]
 nixPkgs = [
-  "python311",
-  "python311Packages.pip",
+  "(python311.withPackages(ps: with ps; [ pip setuptools wheel ]))",
   "nodejs_20",
   # Puppeteer Chromium 의존 라이브러리
   "nss", "nspr", "atk", "cups", "pango", "cairo",

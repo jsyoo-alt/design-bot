@@ -23,12 +23,22 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 log = logging.getLogger(__name__)
 
 TEMPLATES = {
-    "비즈보드": "bizboard",
-    "기본_2줄형": "basic_2line",
-    "기본_2줄형_좌측": "basic_2line_left_obj",
+    "비즈보드":                    "bizboard",
+    "썸네일형":                    "thumbnail",
+    "기본_2줄형":                  "basic_2line",
+    "기본_2줄형_좌측 오브제":      "basic_2line_left",
+    "기본_2줄형_좌측 오브제+뱃지": "basic_2line_left_badge",
+    "앱다운로드형":                "app_download",
+    "앱다운로드+썸네일형":         "app_download_thumb",
+    "텍스트강조+썸네일형":         "text_highlight_thumb",
+    "텍스트강조형":                "text_highlight",
+    "텍스트강조+썸네일형 v2":      "text_highlight_v2_thumb",
+    "텍스트강조형 v2":             "text_highlight_v2",
 }
 
-REQUIRED_BACKGROUNDS = ["bg_bizboard.png", "bg_basic_2line.png", "bg_basic_2line_left.png"]
+REQUIRED_BACKGROUNDS = [
+    "bg_bizboard.png", "bg_basic_2line.png", "bg_basic_2line_left.png", "app_bar.png",
+]
 REQUIRED_FONTS = ["SpoqaHanSansNeo-Bold.ttf", "SpoqaHanSansNeo-Regular.ttf"]
 
 
@@ -211,10 +221,14 @@ def open_modal(trigger_id: str, channel_id: str):
                         "block_id": "badge",
                         "label": {"type": "plain_text", "text": "뱃지 텍스트 (선택)"},
                         "optional": True,
+                        "hint": {
+                            "type": "plain_text",
+                            "text": "기본형: 우측 하단 코너 배지 | 텍스트강조형: 서브 카피 앞 인라인 배지(pill) | v2: 서브 카피 앞 오렌지 텍스트",
+                        },
                         "element": {
                             "type": "plain_text_input",
                             "action_id": "value",
-                            "placeholder": {"type": "plain_text", "text": "예: 32%"},
+                            "placeholder": {"type": "plain_text", "text": "예: 32%  /  29day"},
                             "max_length": 10,
                         },
                     },
@@ -312,19 +326,43 @@ def handle_submission(payload: dict):
                 sub_r=sub,
                 object_image_url=image_url,
             )
+        elif template_key == "thumbnail":
+            img_bytes = composer.compose_thumbnail(
+                title=title, sub=sub, object_image_url=image_url,
+            )
         elif template_key == "basic_2line":
             img_bytes = composer.compose_basic_2line(
-                title=title,
-                sub=sub,
-                object_image_url=image_url,
-                badge_text=badge,
+                title=title, sub=sub, object_image_url=image_url, badge_text=badge,
             )
-        elif template_key == "basic_2line_left_obj":
+        elif template_key == "basic_2line_left":
             img_bytes = composer.compose_basic_2line_left_obj(
-                title=title,
-                sub=sub,
-                object_image_url=image_url,
-                badge_text=badge,
+                title=title, sub=sub, object_image_url=image_url, badge_text=badge,
+            )
+        elif template_key == "basic_2line_left_badge":
+            img_bytes = composer.compose_basic_2line_left_badge(
+                title=title, sub=sub, object_image_url=image_url, badge_text=badge,
+            )
+        elif template_key == "app_download":
+            img_bytes = composer.compose_app_download(title=title, sub=sub)
+        elif template_key == "app_download_thumb":
+            img_bytes = composer.compose_app_download_thumbnail(
+                title=title, sub=sub, object_image_url=image_url,
+            )
+        elif template_key == "text_highlight_thumb":
+            img_bytes = composer.compose_text_highlight_thumbnail(
+                title=title, sub=sub, object_image_url=image_url, badge_text=badge,
+            )
+        elif template_key == "text_highlight":
+            img_bytes = composer.compose_text_highlight(
+                title=title, sub=sub, badge_text=badge,
+            )
+        elif template_key == "text_highlight_v2_thumb":
+            img_bytes = composer.compose_text_highlight_v2_thumbnail(
+                title=title, sub=sub, object_image_url=image_url, badge_text=badge,
+            )
+        elif template_key == "text_highlight_v2":
+            img_bytes = composer.compose_text_highlight_v2(
+                title=title, sub=sub, badge_text=badge,
             )
 
         slack.files_upload_v2(

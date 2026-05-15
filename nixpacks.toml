@@ -1,9 +1,12 @@
 # Railway nixpacks 빌드 설정
 # Python(FastAPI) + Node.js(Puppeteer) 혼합 환경
 
+# Railway nixpacks 빌드 설정
+# Python은 requirements.txt 감지로 자동 설치됨
+# Node.js + Chromium 의존 라이브러리만 명시
+
 [phases.setup]
 nixPkgs = [
-  "python311",
   "nodejs_20",
   # Puppeteer Chromium 의존 라이브러리
   "nss", "nspr", "atk", "cups", "pango", "cairo",
@@ -14,11 +17,9 @@ nixPkgs = [
   "libdrm", "mesa",
 ]
 
-[phases.install]
-cmds = [
-  "python3 -m pip install -r requirements.txt",
-  "npm install",
-]
+# install 단계는 nixpacks 자동 감지에 위임
+# requirements.txt → pip install 자동 실행
+# package.json     → npm install 자동 실행
 
 [start]
 cmd = "python start.py"

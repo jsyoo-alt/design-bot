@@ -1,0 +1,23 @@
+# Railway nixpacks 빌드 설정
+# Python(FastAPI) + Node.js(Puppeteer) 혼합 환경
+
+[phases.setup]
+nixPkgs = [
+  "nodejs_20",
+  # Puppeteer Chromium 의존 라이브러리
+  "nss", "nspr", "atk", "cups", "pango", "cairo",
+  "xorg.libX11", "xorg.libXcomposite", "xorg.libXdamage",
+  "xorg.libXext", "xorg.libXfixes", "xorg.libXrandr", "xorg.libxcb",
+  "libxkbcommon", "alsa-lib", "at-spi2-atk", "dbus",
+  "expat", "fontconfig", "freetype", "glib", "gtk3",
+  "libdrm", "mesa",
+]
+
+[phases.install]
+cmds = [
+  "pip install -r requirements.txt",
+  "npm install",
+]
+
+[start]
+cmd = "python start.py"

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+@font-face {
+  font-family: 'Spoqa';
+  src: url('../assets/fonts/SpoqaHanSansNeo-Bold.ttf') format('truetype');
+  font-weight: 700;
+}
+@font-face {
+  font-family: 'Spoqa';
+  src: url('../assets/fonts/SpoqaHanSansNeo-Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+
+html, body {
+  width: 1029px;
+  height: 258px;
+  overflow: hidden;
+}
+
+/* ── 캔버스 (카카오 비즈보드 공식 사이즈 1029×258) ── */
+.canvas {
+  width: 1029px;
+  height: 258px;
+  position: relative;
+  overflow: hidden;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+
+/* ── 텍스트 스타일 (Pillow 스펙 동일: 48px Bold / 39px Regular) ── */
+.t1 {
+  font-family: 'Spoqa', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  font-weight: 700;
+  font-size: 48px;
+  line-height: 1.15;
+  color: #4C4C4C;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.t2 {
+  font-family: 'Spoqa', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  font-weight: 400;
+  font-size: 39px;
+  line-height: 1.15;
+  color: #777777;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── 레이아웃 공통 ── */
+.vcenter {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.tblock {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── 로고 (120×46 max, 여백 20px from top) ── */
+.logo {
+  position: absolute;
+  top: 20px;
+  max-width: 120px;
+  max-height: 46px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.logo-l { left: 51px; }
+.logo-r { right: 52px; }
+
+/* ── 썸네일 박스 ── */
+.thumb {
+  position: absolute;
+  overflow: hidden;
+}
+.thumb > img.thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── 썸네일 내부 광고주체(로고) — 가이드: 우상단 8px 여백, 120×46px ── */
+.thumb > img.logo-in-thumb {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  max-width: 120px;
+  max-height: 46px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+
+/* ── 인라인 배지 (텍스트강조형, 77×42, #FF6600) ── */
+.badge-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 77px;
+  width: 77px;
+  height: 42px;
+  border-radius: 8px;
+  background: #FF6600;
+  color: #fff;
+  font-family: 'Spoqa', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* 배지 + 서브카피 행 */
+.badge-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 42px;
+}
+.badge-row .t2 {
+  line-height: 42px;
+  height: 42px;
+}
+
+/* ── 코너 배지 (우하단, #FF3B30) ── */
+.badge-corner {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  background: #FF3B30;
+  color: #fff;
+  font-family: 'Spoqa', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  padding: 8px 12px;
+  line-height: 1.1;
+  text-align: center;
+}
+
+/* ── 앱다운로드형 앱바 ── */
+.app-bar {
+  position: absolute;
+  left: 49px;
+  top: 43px;
+  height: auto;
+}
+
+/* ── v2 컬러 프리픽스 ── */
+.color-orange { color: #FF6600; }
+</style>
+</head>
+<body>
+<div class="canvas" id="canvas"></div>
+
+<script>
+// ────────────────────────────────────────────────────────────
+// URL 파라미터
+// ────────────────────────────────────────────────────────────
+const p      = new URLSearchParams(location.search);
+const T      = p.get('template')   || 'basic_2line';
+const title  = p.get('title')      || '';
+const sub    = p.get('sub')        || '';
+const titleL = p.get('title_l')    || title;
+const subL   = p.get('sub_l')      || sub;
+const badge  = p.get('badge')      || '';
+const imgUrl = p.get('image_url')  || '';
+
+// ────────────────────────────────────────────────────────────
+// 유틸
+// ────────────────────────────────────────────────────────────
+/** HTML 엔티티 이스케이프 */
+const e = s => String(s)
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;');
+
+/** URL 속성용 (따옴표만 처리) */
+const eUrl = u => String(u).replace(/"/g, '%22');
+
+/** 배경 이미지 설정 */
+function setBg(file) {
+  document.getElementById('canvas').style.backgroundImage =
+    `url('../assets/backgrounds/${file}')`;
+}
+
+// ────────────────────────────────────────────────────────────
+// HTML 생성 헬퍼
+// ────────────────────────────────────────────────────────────
+
+/** 기본 텍스트 블록 (title + sub, 좌측 정렬) */
+function textBlock(t, s, maxW) {
+  return `<div class="tblock" style="max-width:${maxW}px">
+    <div class="t1" style="max-width:${maxW}px">${e(t)}</div>
+    <div class="t2" style="max-width:${maxW}px">${e(s)}</div>
+  </div>`;
+}
+
+/** 텍스트강조형: title + [pill badge | sub copy] */
+function textBlockBadge(t, s, bdg, maxW) {
+  if (!bdg) return textBlock(t, s, maxW);
+  const subW = maxW - 77 - 14; // badge(77) + gap(14)
+  return `<div class="tblock" style="max-width:${maxW}px">
+    <div class="t1" style="max-width:${maxW}px">${e(t)}</div>
+    <div class="badge-row">
+      <span class="badge-inline">${e(bdg)}</span>
+      <span class="t2" style="max-width:${subW}px">${e(s)}</span>
+    </div>
+  </div>`;
+}
+
+/** 텍스트강조형 v2: title + [orange prefix] sub copy */
+function textBlockV2(t, s, prefix, maxW) {
+  const subLine = prefix
+    ? `<div class="t2" style="max-width:${maxW}px"><span class="color-orange">${e(prefix)} </span>${e(s)}</div>`
+    : `<div class="t2" style="max-width:${maxW}px">${e(s)}</div>`;
+  return `<div class="tblock" style="max-width:${maxW}px">
+    <div class="t1" style="max-width:${maxW}px">${e(t)}</div>
+    ${subLine}
+  </div>`;
+}
+
+/** 썸네일 박스 (누끼 오브제용 — 로고 없음) */
+function thumb(x, y, w, h, r, url) {
+  if (!url) return '';
+  return `<div class="thumb" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${r}px">
+    <img class="thumb-img" src="${eUrl(url)}" alt="" />
+  </div>`;
+}
+
+/** 썸네일 박스 + 광고주체 로고 (카카오 가이드: 이미지 내 우상단 8px, 120×46px)
+ *  썸네일형·앱다운로드+썸네일형·텍스트강조+썸네일형에서 사용 */
+function thumbWithLogo(x, y, w, h, r, url) {
+  const logoTag = `<img class="logo-in-thumb" src="../assets/backgrounds/logo.png" alt="" />`;
+  if (!url) {
+    // 이미지 없어도 로고 영역은 유지
+    return `<div class="thumb" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${r}px;background:#eee">
+      ${logoTag}
+    </div>`;
+  }
+  return `<div class="thumb" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;border-radius:${r}px">
+    <img class="thumb-img" src="${eUrl(url)}" alt="" />
+    ${logoTag}
+  </div>`;
+}
+
+/** 로고 */
+function logo(side) {
+  return `<img class="logo logo-${side}" src="../assets/backgrounds/logo.png" alt="" />`;
+}
+
+/** 코너 배지 (줄바꿈 지원) */
+function cornerBadge(txt) {
+  if (!txt) return '';
+  const lines = txt.split('\n');
+  const fs = lines.length > 1 ? 25 : 30;
+  return `<div class="badge-corner" style="font-size:${fs}px">${lines.map(e).join('<br>')}</div>`;
+}
+
+// ────────────────────────────────────────────────────────────
+// 레이아웃 상수 (composer.py 수치와 동일)
+// ────────────────────────────────────────────────────────────
+const M = 48;   // MARGIN
+const G = 33;   // OBJ_GAP
+const TLX = 51; // TEXT_L_X
+
+// 비즈보드 오브제 영역 (캔버스 정중앙)
+const OBJ_W = 315, OBJ_H = 258;
+const OBJ_CX = Math.floor((1029 - OBJ_W) / 2); // 357
+
+// 기본형 우측 썸네일 (bg_basic_2line 계열)
+// OBJ_X = 1029 - 315 - 48 = 666, thumb_y = (258-186)/2 = 36
+const TR = { x: 1029 - OBJ_W - M, y: (258 - 186) / 2, w: 315, h: 186, r: 8 };
+
+// 썸네일형/텍스트강조형 프레임 (THUMB_FRAME_*)
+const TF = { x: 652, y: 36, w: 308, h: 186, r: 12 };
+
+// 좌측 오브제 (basic_2line_left 계열)
+const OL = { x: M, y: (258 - 186) / 2, w: OBJ_W, h: 186, r: 8 };
+
+// 좌측 오브제 뒤 텍스트 시작 X
+const LEFT_TEXT_X = M + OBJ_W + G; // 48 + 315 + 33 = 396
+
+// ────────────────────────────────────────────────────────────
+// 템플릿별 렌더링
+// ────────────────────────────────────────────────────────────
+const canvas = document.getElementById('canvas');
+let html = '';
+
+// ── 1. 비즈보드 ──────────────────────────────────────────────
+// bg_bizboard.png | 좌텍스트(48~324) | 중앙이미지(357~672) | 우텍스트(705~981)
+if (T === 'bizboard') {
+  setBg('bg_bizboard.png');
+
+  const objHtml = imgUrl
+    ? `<div style="position:absolute;left:${OBJ_CX}px;top:0;width:${OBJ_W}px;height:${OBJ_H}px;
+         display:flex;align-items:center;justify-content:center;overflow:hidden">
+         <img src="${eUrl(imgUrl)}" style="max-width:${OBJ_W}px;max-height:${OBJ_H}px;object-fit:contain" alt="" />
+       </div>`
+    : '';
+
+  // 좌측: x=48, 우측: x=705, 각 max-width=276
+  html = `
+    <div class="vcenter tblock" style="left:${M}px;max-width:276px">
+      <div class="t1" style="max-width:276px">${e(titleL)}</div>
+      <div class="t2" style="max-width:276px">${e(subL)}</div>
+    </div>
+    ${objHtml}
+    <div class="vcenter tblock" style="left:705px;max-width:276px">
+      <div class="t1" style="max-width:276px">${e(title)}</div>
+      <div class="t2" style="max-width:276px">${e(sub)}</div>
+    </div>`;
+
+// ── 2. 기본_2줄형 ────────────────────────────────────────────
+// bg_basic_2line.png | 좌텍스트 | 우측 이미지(선택)
+} else if (T === 'basic_2line') {
+  setBg('bg_basic_2line.png');
+  // textMaxW: 이미지 있으면 666-33-48=585, 없으면 1029-48-48=933
+  const textMaxW = imgUrl ? TR.x - G - M : 1029 - M - M;
+  html = `
+    <div class="vcenter" style="left:${M}px">${textBlock(title, sub, textMaxW)}</div>
+    ${thumb(TR.x, TR.y, TR.w, TR.h, TR.r, imgUrl)}`;
+
+// ── 3. 기본_2줄형_좌측 오브제 ───────────────────────────────
+// bg_basic_2line_left.png | 좌측 이미지(선택) | 우측 텍스트
+} else if (T === 'basic_2line_left') {
+  setBg('bg_basic_2line_left.png');
+  // TEXT_X=396, textMaxW=1029-48-396=585
+  const textMaxW = 1029 - M - LEFT_TEXT_X;
+  html = `
+    ${thumb(OL.x, OL.y, OL.w, OL.h, OL.r, imgUrl)}
+    <div class="vcenter" style="left:${LEFT_TEXT_X}px">${textBlock(title, sub, textMaxW)}</div>`;
+
+// ── 4. 기본_2줄형_좌측 오브제+뱃지 ─────────────────────────
+// bg_basic_2line_left.png | 로고(좌상단) | 좌측이미지 | 우텍스트 | 코너배지
+} else if (T === 'basic_2line_left_badge') {
+  setBg('bg_basic_2line_left.png');
+  const textMaxW = 1029 - M - LEFT_TEXT_X;
+  html = `
+    ${logo('l')}
+    ${thumb(OL.x, OL.y, OL.w, OL.h, OL.r, imgUrl)}
+    <div class="vcenter" style="left:${LEFT_TEXT_X}px">${textBlock(title, sub, textMaxW)}</div>
+    ${cornerBadge(badge)}`;
+
+// ── 5. 썸네일형 ──────────────────────────────────────────────
+// bg_basic_2line.png | 좌텍스트 | 우측 썸네일 프레임(로고 내장)
+} else if (T === 'thumbnail') {
+  setBg('bg_basic_2line.png');
+  // textMaxW: 652-33-51=568 (이미지 있을 때), 1029-48-51=930 (없을 때)
+  const textMaxW = imgUrl ? TF.x - G - TLX : 1029 - M - TLX;
+  html = `
+    <div class="vcenter" style="left:${TLX}px">${textBlock(title, sub, textMaxW)}</div>
+    ${thumbWithLogo(TF.x, TF.y, TF.w, TF.h, TF.r, imgUrl)}`;
+
+// ── 6. 앱다운로드형 ──────────────────────────────────────────
+// bg_basic_2line.png | 앱바(49,43) | 텍스트(y=90 이하 중앙)
+} else if (T === 'app_download') {
+  setBg('bg_basic_2line.png');
+  const textMaxW = 1029 - M * 2; // 933
+  html = `
+    <img class="app-bar" src="../assets/backgrounds/app_bar.png" alt="" />
+    <div style="position:absolute;top:90px;left:${M}px;bottom:0;right:${M}px;
+                display:flex;flex-direction:column;justify-content:center">
+      ${textBlock(title, sub, textMaxW)}
+    </div>`;
+
+// ── 7. 앱다운로드+썸네일형 ───────────────────────────────────
+// bg_basic_2line.png | 앱바 | 좌텍스트(y=90↓) | 우측 썸네일 프레임(로고 내장)
+} else if (T === 'app_download_thumb') {
+  setBg('bg_basic_2line.png');
+  // textMaxW: 652-33-48=571 (이미지 있을 때), 1029-48*2=933 (없을 때)
+  const textMaxW = imgUrl ? TF.x - G - M : 1029 - M * 2;
+  html = `
+    <img class="app-bar" src="../assets/backgrounds/app_bar.png" alt="" />
+    ${thumbWithLogo(TF.x, TF.y, TF.w, TF.h, TF.r, imgUrl)}
+    <div style="position:absolute;top:90px;left:${M}px;bottom:0;width:${textMaxW}px;
+                display:flex;flex-direction:column;justify-content:center">
+      ${textBlock(title, sub, textMaxW)}
+    </div>`;
+
+// ── 8. 텍스트강조+썸네일형 ───────────────────────────────────
+// bg_basic_2line.png | 타이틀 + [pill배지|서브] | 우측 썸네일(로고 내장)
+} else if (T === 'text_highlight_thumb') {
+  setBg('bg_basic_2line.png');
+  const textMaxW = imgUrl ? TF.x - G - TLX : 1029 - M - TLX; // 568 or 930
+  html = `
+    <div class="vcenter" style="left:${TLX}px">${textBlockBadge(title, sub, badge, textMaxW)}</div>
+    ${thumbWithLogo(TF.x, TF.y, TF.w, TF.h, TF.r, imgUrl)}`;
+
+// ── 9. 텍스트강조형 ──────────────────────────────────────────
+// bg_basic_2line.png | 로고(우) | 타이틀 + [pill배지|서브] (이미지 없음)
+} else if (T === 'text_highlight') {
+  setBg('bg_basic_2line.png');
+  const textMaxW = 1029 - M - TLX; // 930
+  html = `
+    ${logo('r')}
+    <div class="vcenter" style="left:${TLX}px">${textBlockBadge(title, sub, badge, textMaxW)}</div>`;
+
+// ── 10. 텍스트강조+썸네일형 v2 ───────────────────────────────
+// bg_basic_2line.png | 타이틀 + [오렌지프리픽스 서브] | 우측 썸네일(로고 내장)
+} else if (T === 'text_highlight_v2_thumb') {
+  setBg('bg_basic_2line.png');
+  const textMaxW = imgUrl ? TF.x - G - TLX : 1029 - M - TLX;
+  html = `
+    <div class="vcenter" style="left:${TLX}px">${textBlockV2(title, sub, badge, textMaxW)}</div>
+    ${thumbWithLogo(TF.x, TF.y, TF.w, TF.h, TF.r, imgUrl)}`;
+
+// ── 11. 텍스트강조형 v2 ──────────────────────────────────────
+// bg_basic_2line.png | 로고(우) | 타이틀 + [오렌지프리픽스 서브] (이미지 없음)
+} else if (T === 'text_highlight_v2') {
+  setBg('bg_basic_2line.png');
+  const textMaxW = 1029 - M - TLX;
+  html = `
+    ${logo('r')}
+    <div class="vcenter" style="left:${TLX}px">${textBlockV2(title, sub, badge, textMaxW)}</div>`;
+}
+
+canvas.innerHTML = html;
+</script>
+</body>
+</html>

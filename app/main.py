@@ -18,6 +18,7 @@ from slack_sdk.errors import SlackApiError
 
 from app import composer
 from app.config import SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, BACKGROUNDS_DIR, FONTS_DIR
+from app.rembg_utils import needs_rembg, remove_bg_to_data_url
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -68,6 +69,11 @@ async def lifespan(application: FastAPI):
         log.error("[STARTUP] 위 파일들이 없습니다. git에 추가했는지 확인하세요.")
     else:
         log.info("[STARTUP] 모든 필수 파일 확인 완료")
+
+    # rembg 모델 워밍업 (첫 요청 지연 ~10초 방지)
+    from app.rembg_utils import warmup
+    warmup()
+
     yield
 
 
@@ -318,6 +324,17 @@ def handle_submission(payload: dict):
         if template_key is None:
             raise ValueError(f"알 수 없는 템플릿: '{template}' — 선택 가능: {list(TEMPLATES.keys())}")
 
+        # 누끼 전처리: 썸네일형이 아닌 템플릿에 이미지가 있으면 rembg 적용
+        # Pillow·HTML 양 경로 모두 data URL을 수신할 수 있도록 _download_image에 data URL 지원 추가됨
+        if image_url and needs_rembg(template_key):
+            log.info("누끼 처리 시작 — template=%s", template_key)
+            slack.chat_postMessage(
+                channel=channel_id,
+                thread_ts=thread_ts,
+                text="🔪 누끼 처리 중... (5~10초 소요)",
+            )
+            image_url = remove_bg_to_data_url(image_url, bot_token=SLACK_BOT_TOKEN)
+            log.info("누끼 처리 완료")
         if template_key == "bizboard":
             img_bytes = composer.compose_bizboard(
                 title_l=title_l or title,

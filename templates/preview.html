@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>카카오 비즈보드 템플릿 프리뷰</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #1a1a1a;
+  font-family: -apple-system, 'Apple SD Gothic Neo', sans-serif;
+  padding: 32px;
+}
+h1 {
+  color: #fff;
+  font-size: 18px;
+  margin-bottom: 24px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+.grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.label {
+  color: #888;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+.frame-wrap {
+  width: 1029px;
+  height: 258px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+}
+iframe {
+  width: 1029px;
+  height: 258px;
+  border: none;
+  display: block;
+}
+</style>
+</head>
+<body>
+<h1>카카오 비즈보드 소재 템플릿 프리뷰 — 1029×258</h1>
+<div class="grid" id="grid"></div>
+
+<script>
+const SAMPLE_IMG = 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&h=300&fit=crop';
+
+const templates = [
+  {
+    key: 'bizboard',
+    label: '1. 비즈보드',
+    params: { title_l: '푸마', sub_l: '신규 발매', title: '레드윙 13%', sub: '베스트템 재입고', image_url: SAMPLE_IMG },
+  },
+  {
+    key: 'basic_2line',
+    label: '2. 기본_2줄형 (이미지 있음)',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고', image_url: SAMPLE_IMG },
+  },
+  {
+    key: 'basic_2line',
+    label: '2. 기본_2줄형 (이미지 없음)',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고' },
+  },
+  {
+    key: 'basic_2line_left',
+    label: '3. 기본_2줄형_좌측 오브제',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고', image_url: SAMPLE_IMG },
+  },
+  {
+    key: 'basic_2line_left_badge',
+    label: '4. 기본_2줄형_좌측 오브제+뱃지',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고', badge: '32%', image_url: SAMPLE_IMG },
+  },
+  {
+    key: 'thumbnail',
+    label: '5. 썸네일형',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고', image_url: SAMPLE_IMG },
+  },
+  {
+    key: 'app_download',
+    label: '6. 앱다운로드형',
+    params: { title: '레드윙 UP TO 13%', sub: '앱 전용 13% 추가 할인' },
+  },
+  {
+    key: 'app_download_thumb',
+    label: '7. 앱다운로드+썸네일형',
+    params: { title: '레드윙 UP TO 13%', sub: '앱 전용 13% 추가 할인', image_url: SAMPLE_IMG },
+  },
+  {
+    key: 'text_highlight_thumb',
+    label: '8. 텍스트강조+썸네일형 (pill 배지)',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고', badge: '32%', image_url: SAMPLE_IMG },
+  },
+  {
+    key: 'text_highlight',
+    label: '9. 텍스트강조형 (pill 배지, 이미지 없음)',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고', badge: '32%' },
+  },
+  {
+    key: 'text_highlight_v2_thumb',
+    label: '10. 텍스트강조+썸네일형 v2 (컬러 프리픽스)',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고', badge: '29day', image_url: SAMPLE_IMG },
+  },
+  {
+    key: 'text_highlight_v2',
+    label: '11. 텍스트강조형 v2 (컬러 프리픽스, 이미지 없음)',
+    params: { title: '레드윙 UP TO 13%', sub: '베스트템 재입고', badge: '29day' },
+  },
+];
+
+const grid = document.getElementById('grid');
+
+templates.forEach(({ key, label, params }) => {
+  const qs = new URLSearchParams({ template: key, ...params }).toString();
+  const url = `render.html?${qs}`;
+
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = `
+    <div class="label">${label}</div>
+    <div class="frame-wrap">
+      <iframe src="${url}" scrolling="no"></iframe>
+    </div>`;
+  grid.appendChild(row);
+});
+</script>
+</body>
+</html>

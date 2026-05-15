@@ -5,6 +5,8 @@
 
 import os
 import io
+import json
+import subprocess
 import requests
 from PIL import Image, ImageDraw, ImageFont
 from app.config import BACKGROUNDS_DIR, FONTS_DIR
@@ -133,9 +135,14 @@ def _load_font(path: str, size: int) -> ImageFont.FreeTypeFont:
 
 
 def _download_image(url: str) -> Image.Image:
-    headers = {}
+    # base64 data URL 지원 (rembg 전처리 결과물 수신용)
+    if url.startswith("data:"):
+        import base64
+        _, encoded = url.split(",", 1)
+        return Image.open(io.BytesIO(base64.b64decode(encoded))).convert("RGBA")
+
+    headers: dict[str, str] = {}
     if "slack.com" in url:
-        import os
         token = os.environ.get("SLACK_BOT_TOKEN", "")
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -815,3 +822,38 @@ def compose_text_highlight_v2(
     _draw_inline_badge_line(draw, badge_text, sub, font_s, font_s, TEXT_L_X, sub_y, pill=False)
 
     return _export(canvas)
+
+
+# ─────────────────────────────────────────────
+# HTML/Puppeteer 렌더러 (폴백)
+# ─────────────────────────────────────────────
+_RENDERER_JS = os.path.join(os.path.dirname(__file__), "..", "renderer", "render.js")
+
+
+def compose_html(template_key: str, **params) -> bytes:
+    """Puppeteer로 HTML 템플릿을 렌더링해 PNG bytes 반환.
+
+    template_key: render.html이 인식하는 영문 key (예: 'basic_2line')
+    params: title, sub, title_l, sub_l, badge, image_url 등
+
+    image_url이 있고 썸네일형이 아닌 템플릿이면 rembg로 누끼 처리 후
+    base64 data URL로 변환해 render.js에 전달.
+    """
+    from app.rembg_utils import needs_rembg, remove_bg_to_data_url
+
+    image_url = params.get("image_url")
+    if image_url and needs_rembg(template_key):
+        params["image_url"] = remove_bg_to_data_url(image_url)
+
+    payload = json.dumps({"template": template_key, **{k: v for k, v in params.items() if v is not None}})
+
+    result = subprocess.run(
+        ["node", _RENDERER_JS, payload],
+        capture_output=True,
+        timeout=30,
+    )
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Puppeteer 렌더링 실패: {result.stderr.decode(errors='replace')}")
+
+    return result.stdout

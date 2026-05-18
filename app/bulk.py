@@ -193,23 +193,31 @@ def run_bulk(
         try:
             # 2. 합성
             png_bytes = _compose(row)
-
-            # 3. Drive 업로드
             filename = _safe_filename(row)
-            drive_url = upload_png(png_bytes, filename)
+
+            # 3. Drive 업로드 시도 (서비스 계정 quota 제한으로 실패 시 건너뜀)
+            drive_url: str | None = None
+            try:
+                drive_url = upload_png(png_bytes, filename)
+            except Exception as drive_err:
+                log.warning("Drive 업로드 스킵 (행 %d): %s", row.row_index, drive_err)
 
             # 4. Slack 스레드에 파일 업로드
+            comment = f"✅ {row_label}"
+            if drive_url:
+                comment += f"\n📎 Drive: {drive_url}"
             slack.files_upload_v2(
                 channel=channel_id,
                 thread_ts=thread_ts,
                 file=io.BytesIO(png_bytes),
                 filename=filename,
                 title=f"{row.template} | {row.main_copy}",
-                initial_comment=f"✅ {row_label}\n📎 Drive: {drive_url}",
+                initial_comment=comment,
             )
 
             # 5. 시트 상태 업데이트 → 제작완료
-            update_row_status(row.row_index, STATUS_DONE, drive_url)
+            note = drive_url or "슬랙 업로드 완료"
+            update_row_status(row.row_index, STATUS_DONE, note)
             success_count += 1
 
         except Exception as e:

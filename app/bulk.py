@@ -14,6 +14,8 @@ from slack_sdk.errors import SlackApiError
 
 import base64
 
+import requests
+
 from app import composer
 from app.sheets import (
     SheetRow,
@@ -48,18 +50,34 @@ ROW_DELAY_SEC = 1.5
 def _resolve_object_url(url: str | None) -> str | None:
     """
     오브젝트 이미지 URL 전처리.
-    Google Drive URL이면 서비스 계정으로 다운로드 후 data URL로 변환.
+    Google Drive URL이면:
+      1) 공개 다운로드 URL (uc?export=download&id=...) 로 먼저 시도
+      2) 실패 시 서비스 계정 API로 폴백
     일반 URL이면 그대로 반환.
     """
     if not url:
         return None
     file_id = extract_drive_file_id(url)
-    if file_id:
-        log.info("Drive 파일 감지, 서비스 계정으로 다운로드: id=%s", file_id)
-        raw = drive_download(file_id)
+    if not file_id:
+        return url
+
+    # 1) 공개 다운로드 시도 (링크 공유된 파일)
+    public_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    try:
+        resp = requests.get(public_url, timeout=30)
+        resp.raise_for_status()
+        raw = resp.content
+        log.info("Drive 공개 URL 다운로드 성공: id=%s (%d bytes)", file_id, len(raw))
         b64 = base64.b64encode(raw).decode()
         return f"data:image/png;base64,{b64}"
-    return url
+    except Exception as e:
+        log.warning("Drive 공개 URL 실패, 서비스 계정으로 재시도: id=%s, error=%s", file_id, e)
+
+    # 2) 서비스 계정 API 폴백 (서비스 계정과 공유된 파일)
+    raw = drive_download(file_id)
+    b64 = base64.b64encode(raw).decode()
+    log.info("Drive 서비스 계정 다운로드 성공: id=%s (%d bytes)", file_id, len(raw))
+    return f"data:image/png;base64,{b64}"
 
 
 def _compose(row: SheetRow) -> bytes:

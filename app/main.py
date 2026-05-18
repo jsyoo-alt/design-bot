@@ -19,6 +19,7 @@ from slack_sdk.errors import SlackApiError
 from app import composer
 from app.config import SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, BACKGROUNDS_DIR, FONTS_DIR
 from app.rembg_utils import needs_rembg, remove_bg_to_data_url
+from app.main_v2 import router as v2_router, handle_bulk_submission
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -79,6 +80,7 @@ async def lifespan(application: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(v2_router)   # v2: /소재생성2 라우트 마운트
 slack = WebClient(token=SLACK_BOT_TOKEN)
 
 
@@ -274,7 +276,13 @@ async def interactive(request: Request, background_tasks: BackgroundTasks):
     payload = json.loads(form.get("payload", "{}"))
 
     if payload.get("type") == "view_submission":
-        background_tasks.add_task(handle_submission, payload)
+        callback_id = payload.get("view", {}).get("callback_id", "")
+        if callback_id == "bulk_material_v2":
+            # v2: 대량 생성 워커
+            background_tasks.add_task(handle_bulk_submission, payload)
+        else:
+            # v1: 단건 생성 (기본)
+            background_tasks.add_task(handle_submission, payload)
         return JSONResponse({})
 
     return JSONResponse({})

@@ -12,6 +12,8 @@ import time
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
+import base64
+
 from app import composer
 from app.sheets import (
     SheetRow,
@@ -20,7 +22,7 @@ from app.sheets import (
     STATUS_DONE,
     STATUS_FAIL,
 )
-from app.drive import upload_png
+from app.drive import upload_png, extract_drive_file_id, download_file as drive_download
 
 log = logging.getLogger(__name__)
 
@@ -43,13 +45,30 @@ TEMPLATES = {
 ROW_DELAY_SEC = 1.5
 
 
+def _resolve_object_url(url: str | None) -> str | None:
+    """
+    오브젝트 이미지 URL 전처리.
+    Google Drive URL이면 서비스 계정으로 다운로드 후 data URL로 변환.
+    일반 URL이면 그대로 반환.
+    """
+    if not url:
+        return None
+    file_id = extract_drive_file_id(url)
+    if file_id:
+        log.info("Drive 파일 감지, 서비스 계정으로 다운로드: id=%s", file_id)
+        raw = drive_download(file_id)
+        b64 = base64.b64encode(raw).decode()
+        return f"data:image/png;base64,{b64}"
+    return url
+
+
 def _compose(row: SheetRow) -> bytes:
     """SheetRow → composer 호출 → PNG bytes 반환."""
     template_key = TEMPLATES.get(row.template)
     if template_key is None:
         raise ValueError(f"알 수 없는 템플릿: '{row.template}'")
 
-    obj_url = row.object_url or None
+    obj_url = _resolve_object_url(row.object_url)
 
     if template_key == "bizboard":
         return composer.compose_bizboard(

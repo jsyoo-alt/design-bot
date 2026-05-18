@@ -22,6 +22,22 @@ SCOPES = [
 
 MIME_PNG = "image/png"
 
+# Google Drive URL에서 파일 ID를 추출하는 패턴
+import re
+_DRIVE_ID_PATTERNS = [
+    re.compile(r"/file/d/([a-zA-Z0-9_-]+)"),   # /file/d/{ID}/view
+    re.compile(r"[?&]id=([a-zA-Z0-9_-]+)"),     # ?id={ID} or &id={ID}
+]
+
+
+def extract_drive_file_id(url: str) -> str | None:
+    """Google Drive URL에서 파일 ID 추출. Drive URL이 아니면 None."""
+    for pattern in _DRIVE_ID_PATTERNS:
+        m = pattern.search(url)
+        if m:
+            return m.group(1)
+    return None
+
 
 def _get_drive_service():
     """Google Drive API 서비스 객체 반환."""
@@ -32,6 +48,28 @@ def _get_drive_service():
     info = json.loads(GOOGLE_SA_JSON)
     creds = Credentials.from_service_account_info(info, scopes=SCOPES)
     return build("drive", "v3", credentials=creds, cache_discovery=False)
+
+
+def download_file(file_id: str) -> bytes:
+    """
+    서비스 계정 인증으로 Google Drive 파일 다운로드.
+
+    Args:
+        file_id: Drive 파일 ID
+
+    Returns:
+        파일 바이트
+    """
+    service = _get_drive_service()
+    request = service.files().get_media(fileId=file_id)
+    buf = io.BytesIO()
+    from googleapiclient.http import MediaIoBaseDownload
+    downloader = MediaIoBaseDownload(buf, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+    log.info("Drive 파일 다운로드 완료: id=%s (%d bytes)", file_id, buf.tell())
+    return buf.getvalue()
 
 
 def upload_png(

@@ -3,12 +3,14 @@ Google Sheets 연동 모듈 (v2)
 
 시트 구조 (1행: 헤더):
   A: template      - 템플릿명
-  B: main_copy     - 메인 카피
-  C: sub_copy      - 서브 카피
+  B: main_copy     - 메인 카피 (비즈보드: 우측)
+  C: sub_copy      - 서브 카피 (비즈보드: 우측)
   D: badge         - 뱃지 텍스트 (선택)
   E: object_url    - 오브젝트 PNG URL (선택)
   F: status        - 상태: 제작요청 / 제작완료 / 실패
   G: result_note   - 결과 메모 (봇 기입: Drive URL 또는 에러 메시지)
+  H: main_copy_l   - 비즈보드 좌측 메인 카피 (비즈보드 전용, 나머지 템플릿은 비워둠)
+  I: sub_copy_l    - 비즈보드 좌측 서브 카피 (비즈보드 전용, 나머지 템플릿은 비워둠)
 """
 
 import json
@@ -36,6 +38,8 @@ COL_BADGE       = 3  # D
 COL_OBJECT_URL  = 4  # E
 COL_STATUS      = 5  # F
 COL_RESULT_NOTE = 6  # G
+COL_MAIN_COPY_L = 7  # H (비즈보드 좌측 메인)
+COL_SUB_COPY_L  = 8  # I (비즈보드 좌측 서브)
 
 STATUS_REQUEST  = "제작요청"
 STATUS_DONE     = "제작완료"
@@ -50,11 +54,13 @@ class SheetRow:
     """시트 한 행을 표현하는 데이터 클래스."""
     row_index: int      # 시트 행 번호 (1-based, 헤더 포함)
     template: str
-    main_copy: str
-    sub_copy: str
+    main_copy: str      # 메인 카피 (비즈보드: 우측)
+    sub_copy: str       # 서브 카피 (비즈보드: 우측)
     badge: str | None
     object_url: str | None
     status: str
+    main_copy_l: str | None  # 비즈보드 좌측 메인 카피
+    sub_copy_l: str | None   # 비즈보드 좌측 서브 카피
 
 
 def _get_credentials() -> Credentials:
@@ -93,8 +99,8 @@ def fetch_pending_rows() -> list[SheetRow]:
         if i == HEADER_ROW:
             continue  # 헤더 스킵
 
-        # 컬럼 수 부족한 행 패딩
-        padded = row + [""] * (COL_RESULT_NOTE + 1 - len(row))
+        # 컬럼 수 부족한 행 패딩 (I열까지)
+        padded = row + [""] * (COL_SUB_COPY_L + 1 - len(row))
 
         status = padded[COL_STATUS].strip()
         if status != STATUS_REQUEST:
@@ -109,13 +115,15 @@ def fetch_pending_rows() -> list[SheetRow]:
             continue
 
         pending.append(SheetRow(
-            row_index  = i + 1,   # 1-based (시트 실제 행번호)
-            template   = template,
-            main_copy  = main_copy,
-            sub_copy   = sub_copy,
-            badge      = padded[COL_BADGE].strip() or None,
-            object_url = padded[COL_OBJECT_URL].strip() or None,
-            status     = status,
+            row_index   = i + 1,   # 1-based (시트 실제 행번호)
+            template    = template,
+            main_copy   = main_copy,
+            sub_copy    = sub_copy,
+            badge       = padded[COL_BADGE].strip() or None,
+            object_url  = padded[COL_OBJECT_URL].strip() or None,
+            status      = status,
+            main_copy_l = padded[COL_MAIN_COPY_L].strip() or None,
+            sub_copy_l  = padded[COL_SUB_COPY_L].strip() or None,
         ))
 
     log.info("제작요청 행 %d개 발견", len(pending))

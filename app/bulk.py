@@ -53,8 +53,10 @@ def _compose(row: SheetRow) -> bytes:
 
     if template_key == "bizboard":
         return composer.compose_bizboard(
-            title_l=row.main_copy, sub_l=row.sub_copy,
-            title_r=row.main_copy, sub_r=row.sub_copy,
+            title_l=row.main_copy_l or row.main_copy,
+            sub_l=row.sub_copy_l or row.sub_copy,
+            title_r=row.main_copy,
+            sub_r=row.sub_copy,
             object_image_url=obj_url,
         )
     elif template_key == "thumbnail":

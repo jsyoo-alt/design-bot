@@ -6,10 +6,13 @@
 import os
 import io
 import json
+import logging
 import subprocess
 import requests
 from PIL import Image, ImageDraw, ImageFont
 from app.config import BACKGROUNDS_DIR, FONTS_DIR
+
+log = logging.getLogger(__name__)
 
 # 카카오 비즈보드 공식 스펙
 CANVAS_SIZE = (1029, 258)
@@ -75,10 +78,12 @@ TEXT_L_X = 51
 LOGO_RIGHT_MARGIN = 52
 
 # 레이아웃 공통 규칙
-MARGIN  = 48   # 양쪽 끝 투명 공백
-OBJ_GAP = 33   # 카피-오브젝트 최소 간격 (3개 형태 동일)
-TEXT_MIN_W = 290  # 두 줄 중 최소 한 줄은 이 이상이어야 함
-TEXT_MAX_W = 585  # 텍스트 최대 길이
+MARGIN       = 48   # 양쪽 끝 투명 공백
+OBJ_GAP      = 33   # 카피-오브젝트 최소 간격 (우측 정렬형)
+OBJ_GAP_LEFT = 50   # 카피-오브젝트 최소 간격 (좌측 정렬형, 가이드 50px)
+OBJ_MIN_W    = 219  # 오브젝트 실제 가로 최소 권장값 (가이드 Safe Zone)
+TEXT_MIN_W   = 290  # 두 줄 중 최소 한 줄은 이 이상이어야 함 (가이드)
+TEXT_MAX_W   = 585  # 텍스트 최대 길이
 
 
 # ─────────────────────────────────────────────
@@ -193,6 +198,71 @@ def _draw_text_left(draw, text, font, color, x, y):
     draw.text((x, y), text, font=font, fill=color)
 
 
+def _fit_object_image(
+    img: Image.Image,
+    area_w: int = OBJECT_AREA_W,
+    area_h: int = OBJECT_AREA_H,
+    min_w: int = OBJ_MIN_W,
+) -> Image.Image:
+    """오브젝트형 이미지 리사이즈.
+
+    규칙:
+    - 박스(area_w × area_h) 안에 contain-fit (좌우 크롭 금지)
+    - 결과 width < min_w 이면 min_w 기준으로 스케일 업 (세로 중앙 크롭 허용)
+    """
+    orig_w, orig_h = img.width, img.height
+
+    # 1단계: contain fit — 전체가 박스 안에 들어오도록
+    scale = min(area_w / orig_w, area_h / orig_h)
+    new_w = round(orig_w * scale)
+    new_h = round(orig_h * scale)
+
+    # 2단계: width 가 min_w 미만이면 min_w 기준으로 스케일 업
+    if new_w < min_w:
+        scale = min_w / orig_w
+        new_w = min_w
+        new_h = round(orig_h * scale)
+
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+
+    # 3단계: height 가 area_h 초과하면 상하 중앙 크롭
+    if img.height > area_h:
+        top = (img.height - area_h) // 2
+        img = img.crop((0, top, img.width, top + area_h))
+
+    return img
+
+
+def _paste_object_image(canvas: Image.Image, img: Image.Image, area_x: int) -> None:
+    """오브젝트형(투명 PNG) 이미지를 캔버스에 배치.
+
+    area_x: 오브젝트 영역 시작 X (폭 OBJECT_AREA_W)
+    - _fit_object_image() 로 최소 219px 보장
+    - 영역 내 수평 중앙 + 캔버스 세로 중앙 정렬
+    """
+    fitted = _fit_object_image(img)
+    x = area_x + (OBJECT_AREA_W - fitted.width) // 2
+    y = (CANVAS_SIZE[1] - fitted.height) // 2
+    _paste_with_alpha(canvas, fitted, (x, y))
+
+
+def _check_text_min_width(
+    draw: ImageDraw.ImageDraw,
+    title: str,
+    sub: str,
+    font_m: ImageFont.FreeTypeFont,
+    font_s: ImageFont.FreeTypeFont,
+) -> None:
+    """텍스트 최소 길이(290px) 가이드 미달 시 경고 로그."""
+    main_w = draw.textlength(title, font=font_m)
+    sub_w  = draw.textlength(sub,   font=font_s)
+    if max(main_w, sub_w) < TEXT_MIN_W:
+        log.warning(
+            "텍스트 길이 가이드 미달 (최소 %dpx): main=%.0fpx '%s', sub=%.0fpx '%s'",
+            TEXT_MIN_W, main_w, title, sub_w, sub,
+        )
+
+
 def _has_transparency(img: Image.Image, threshold: float = 0.05) -> bool:
     """투명 픽셀(alpha < 128)이 threshold 비율 이상이면 누끼 이미지로 판단"""
     if img.mode != "RGBA":
@@ -288,11 +358,7 @@ def compose_bizboard(
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
-            # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
-            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x = OBJ_X + (OBJECT_AREA_W - obj_img.width) // 2
-            y = (CANVAS_SIZE[1] - obj_img.height) // 2
-            _paste_with_alpha(canvas, obj_img, (x, y))
+            _paste_object_image(canvas, obj_img, OBJ_X)
         else:
             # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
             obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
@@ -301,6 +367,7 @@ def compose_bizboard(
             y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
 
+    _check_text_min_width(draw, title_l, sub_l, font_main, font_sub)
     return _export(canvas)
 
 
@@ -322,11 +389,7 @@ def compose_basic_2line(
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
-            # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
-            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x = OBJ_X + (OBJECT_AREA_W - obj_img.width) // 2
-            y = (CANVAS_SIZE[1] - obj_img.height) // 2
-            _paste_with_alpha(canvas, obj_img, (x, y))
+            _paste_object_image(canvas, obj_img, OBJ_X)
         else:
             # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
             obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
@@ -340,7 +403,7 @@ def compose_basic_2line(
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    TEXT_X = MARGIN  # 48px
+    TEXT_X = TEXT_L_X  # 51px (피그마 실측, 가이드 기준)
     text_max_w = (OBJ_X - OBJ_GAP - TEXT_X) if object_image_url else (CANVAS_SIZE[0] - MARGIN - TEXT_X)
     title = _truncate_text(draw, title, font_main, text_max_w)
     sub = _truncate_text(draw, sub, font_sub, text_max_w)
@@ -356,6 +419,7 @@ def compose_basic_2line(
     if badge_text:
         _draw_badge(draw, badge_text, canvas)
 
+    _check_text_min_width(draw, title, sub, font_main, font_sub)
     return _export(canvas)
 
 
@@ -377,11 +441,7 @@ def compose_basic_2line_left_obj(
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
-            # 누끼 이미지 → 오브젝트형 (315x258, 투명 유지)
-            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x = OBJ_LEFT + (OBJECT_AREA_W - obj_img.width) // 2
-            y = (CANVAS_SIZE[1] - obj_img.height) // 2
-            _paste_with_alpha(canvas, obj_img, (x, y))
+            _paste_object_image(canvas, obj_img, OBJ_LEFT)
         else:
             # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
             obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
@@ -395,9 +455,9 @@ def compose_basic_2line_left_obj(
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    # 우측 텍스트: 이미지 우측 끝 + OBJ_GAP(33), 우측도 MARGIN(48) 확보
-    TEXT_X = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP  # 48 + 315 + 33 = 396
-    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X  # 1029 - 48 - 396 = 585
+    # 우측 텍스트: 이미지 우측 끝 + OBJ_GAP_LEFT(50px, 좌측형 가이드), 우측도 MARGIN(48) 확보
+    TEXT_X = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP_LEFT  # 48 + 315 + 50 = 413
+    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X      # 1029 - 48 - 413 = 568
     title = _truncate_text(draw, title, font_main, text_max_w)
     sub = _truncate_text(draw, sub, font_sub, text_max_w)
 
@@ -412,6 +472,7 @@ def compose_basic_2line_left_obj(
     if badge_text:
         _draw_badge(draw, badge_text, canvas)
 
+    _check_text_min_width(draw, title, sub, font_main, font_sub)
     return _export(canvas)
 
 
@@ -457,7 +518,11 @@ def _draw_badge(draw: ImageDraw.Draw, text: str, canvas: Image.Image, color: str
 def _export(canvas: Image.Image) -> bytes:
     buf = io.BytesIO()
     canvas.save(buf, format="PNG", optimize=True)
-    return buf.getvalue()
+    data = buf.getvalue()
+    size_kb = len(data) / 1024
+    if size_kb > 300:
+        log.warning("소재 PNG 용량 초과: %.1fKB (가이드 최대 300KB)", size_kb)
+    return data
 
 
 # ─────────────────────────────────────────────
@@ -594,10 +659,7 @@ def compose_basic_2line_left_badge(
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
-            obj_img.thumbnail((OBJECT_AREA_W, OBJECT_AREA_H), Image.LANCZOS)
-            x = OBJ_LEFT + (OBJECT_AREA_W - obj_img.width) // 2
-            y = (CANVAS_SIZE[1] - obj_img.height) // 2
-            _paste_with_alpha(canvas, obj_img, (x, y))
+            _paste_object_image(canvas, obj_img, OBJ_LEFT)
         else:
             obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
             obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
@@ -608,8 +670,8 @@ def compose_basic_2line_left_badge(
     font_m = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_s = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    TEXT_X    = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP
-    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X
+    TEXT_X     = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP_LEFT  # 48 + 315 + 50 = 413
+    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X          # 1029 - 48 - 413 = 568
     title = _truncate_text(draw, title, font_m, text_max_w)
     sub   = _truncate_text(draw, sub,   font_s, text_max_w)
 
@@ -620,6 +682,7 @@ def compose_basic_2line_left_badge(
     if badge_text:
         _draw_badge(draw, badge_text, canvas)
 
+    _check_text_min_width(draw, title, sub, font_m, font_s)
     return _export(canvas)
 
 

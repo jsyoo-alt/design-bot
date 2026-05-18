@@ -334,8 +334,22 @@ def handle_submission(payload: dict):
                 thread_ts=thread_ts,
                 text="🔪 누끼 처리 중... (5~10초 소요)",
             )
-            image_url = remove_bg_to_data_url(image_url, bot_token=SLACK_BOT_TOKEN)
-            log.info("누끼 처리 완료")
+            try:
+                image_url = remove_bg_to_data_url(image_url, bot_token=SLACK_BOT_TOKEN)
+                log.info("누끼 처리 완료")
+                slack.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=thread_ts,
+                    text="✅ 누끼 완료 — 소재 합성 중...",
+                )
+            except Exception as rembg_err:
+                log.warning("누끼 처리 실패, 원본 이미지 사용: %s", rembg_err)
+                slack.chat_postMessage(
+                    channel=channel_id,
+                    thread_ts=thread_ts,
+                    text="⚠️ 누끼 실패 — 원본 이미지로 대체합니다",
+                )
+                # image_url은 원본 그대로 유지
         if template_key == "bizboard":
             img_bytes = composer.compose_bizboard(
                 title_l=title_l or title,

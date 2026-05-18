@@ -72,8 +72,11 @@ INLINE_BADGE_R   = 8
 INLINE_BADGE_GAP = 14
 INLINE_BADGE_COL = "#FF6600"
 
-# 좌측 텍스트 기준 X (피그마 실측)
-TEXT_L_X = 51
+# 좌측 텍스트 기준 X (PSD 가이드 실측)
+TEXT_L_X = 48
+
+# Main-Sub 텍스트 행간 간격 (PSD 실측: Main bottom=123, Sub top=144 → 21px)
+MAIN_SUB_GAP = 21
 # 우측 로고 기준 (캔버스 우측에서 52px 여백)
 LOGO_RIGHT_MARGIN = 52
 
@@ -333,11 +336,11 @@ def compose_bizboard(
 
     title_bbox = draw.textbbox((0, 0), title_l, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub_l, font=font_sub)
-    block_h = (title_bbox[3] - title_bbox[1]) + 16 + (sub_bbox[3] - sub_bbox[1])
+    block_h = (title_bbox[3] - title_bbox[1]) + MAIN_SUB_GAP + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
     _draw_text_centered(draw, title_l, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start, LEFT_PADDING, LEFT_TEXT_END)
-    _draw_text_centered(draw, sub_l, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start + (title_bbox[3] - title_bbox[1]) + 8, LEFT_PADDING, LEFT_TEXT_END)
+    _draw_text_centered(draw, sub_l, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start + (title_bbox[3] - title_bbox[1]) + MAIN_SUB_GAP, LEFT_PADDING, LEFT_TEXT_END)
 
     # 우측 텍스트: 이미지 끝 + OBJ_GAP(33) ~ CANVAS - MARGIN(48)
     RIGHT_TEXT_START = OBJ_X_END + OBJ_GAP         # 672 + 33 = 705
@@ -348,11 +351,11 @@ def compose_bizboard(
 
     title_bbox_r = draw.textbbox((0, 0), title_r_t, font=font_main)
     sub_bbox_r = draw.textbbox((0, 0), sub_r_t, font=font_sub)
-    block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + 16 + (sub_bbox_r[3] - sub_bbox_r[1])
+    block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + MAIN_SUB_GAP + (sub_bbox_r[3] - sub_bbox_r[1])
     y_start_r = (CANVAS_SIZE[1] - block_h_r) // 2
 
     _draw_text_centered(draw, title_r_t, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
-    _draw_text_centered(draw, sub_r_t, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + 8, RIGHT_TEXT_START, RIGHT_TEXT_END)
+    _draw_text_centered(draw, sub_r_t, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + MAIN_SUB_GAP, RIGHT_TEXT_START, RIGHT_TEXT_END)
 
     # 오브제 이미지 — 캔버스 정중앙, 세로 중앙
     if object_image_url:
@@ -403,18 +406,18 @@ def compose_basic_2line(
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    TEXT_X = TEXT_L_X  # 51px (피그마 실측, 가이드 기준)
+    TEXT_X = TEXT_L_X  # 48px (PSD 가이드 기준)
     text_max_w = (OBJ_X - OBJ_GAP - TEXT_X) if object_image_url else (CANVAS_SIZE[0] - MARGIN - TEXT_X)
     title = _truncate_text(draw, title, font_main, text_max_w)
     sub = _truncate_text(draw, sub, font_sub, text_max_w)
 
     title_bbox = draw.textbbox((0, 0), title, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
-    block_h = (title_bbox[3] - title_bbox[1]) + 16 + (sub_bbox[3] - sub_bbox[1])
+    block_h = (title_bbox[3] - title_bbox[1]) + MAIN_SUB_GAP + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
     _draw_text_left(draw, title, font_main, COLOR_MAIN, TEXT_X, y_start)
-    _draw_text_left(draw, sub, font_sub, COLOR_SUB, TEXT_X, y_start + (title_bbox[3] - title_bbox[1]) + 8)
+    _draw_text_left(draw, sub, font_sub, COLOR_SUB, TEXT_X, y_start + (title_bbox[3] - title_bbox[1]) + MAIN_SUB_GAP)
 
     if badge_text:
         _draw_badge(draw, badge_text, canvas)
@@ -463,11 +466,11 @@ def compose_basic_2line_left_obj(
 
     title_bbox = draw.textbbox((0, 0), title, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub, font=font_sub)
-    block_h = (title_bbox[3] - title_bbox[1]) + 16 + (sub_bbox[3] - sub_bbox[1])
+    block_h = (title_bbox[3] - title_bbox[1]) + MAIN_SUB_GAP + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
     _draw_text_left(draw, title, font_main, COLOR_MAIN, TEXT_X, y_start)
-    _draw_text_left(draw, sub, font_sub, COLOR_SUB, TEXT_X, y_start + (title_bbox[3] - title_bbox[1]) + 8)
+    _draw_text_left(draw, sub, font_sub, COLOR_SUB, TEXT_X, y_start + (title_bbox[3] - title_bbox[1]) + MAIN_SUB_GAP)
 
     if badge_text:
         _draw_badge(draw, badge_text, canvas)
@@ -563,9 +566,9 @@ def _text_block_y(
     """(main_y, sub_y): y_min 아래 구간에서 텍스트 블록 세로 중앙 정렬"""
     m_h = draw.textbbox((0, 0), main, font=font_m)[3] - draw.textbbox((0, 0), main, font=font_m)[1]
     s_h = draw.textbbox((0, 0), sub,  font=font_s)[3] - draw.textbbox((0, 0), sub,  font=font_s)[1]
-    block_h = m_h + 16 + s_h
+    block_h = m_h + MAIN_SUB_GAP + s_h
     y_start = y_min + (CANVAS_SIZE[1] - y_min - block_h) // 2
-    return y_start, y_start + m_h + 16
+    return y_start, y_start + m_h + MAIN_SUB_GAP
 
 
 def _draw_inline_badge_line(
@@ -780,9 +783,9 @@ def compose_text_highlight_thumbnail(
     m_h = draw.textbbox((0, 0), title, font=font_m)[3] - draw.textbbox((0, 0), title, font=font_m)[1]
     badge_line_h = INLINE_BADGE_H if badge_text else (
         draw.textbbox((0, 0), sub, font=font_s)[3] - draw.textbbox((0, 0), sub, font=font_s)[1])
-    block_h = m_h + 16 + badge_line_h
+    block_h = m_h + MAIN_SUB_GAP + badge_line_h
     main_y  = (CANVAS_SIZE[1] - block_h) // 2
-    badge_y = main_y + m_h + 16
+    badge_y = main_y + m_h + MAIN_SUB_GAP
 
     _draw_text_left(draw, title, font_m, COLOR_MAIN, TEXT_L_X, main_y)
     _draw_inline_badge_line(draw, badge_text, sub, font_b, font_s, TEXT_L_X, badge_y, pill=True)
@@ -816,9 +819,9 @@ def compose_text_highlight(
     m_h = draw.textbbox((0, 0), title, font=font_m)[3] - draw.textbbox((0, 0), title, font=font_m)[1]
     badge_line_h = INLINE_BADGE_H if badge_text else (
         draw.textbbox((0, 0), sub, font=font_s)[3] - draw.textbbox((0, 0), sub, font=font_s)[1])
-    block_h = m_h + 16 + badge_line_h
+    block_h = m_h + MAIN_SUB_GAP + badge_line_h
     main_y  = (CANVAS_SIZE[1] - block_h) // 2
-    badge_y = main_y + m_h + 16
+    badge_y = main_y + m_h + MAIN_SUB_GAP
 
     _draw_text_left(draw, title, font_m, COLOR_MAIN, TEXT_L_X, main_y)
     _draw_inline_badge_line(draw, badge_text, sub, font_b, font_s, TEXT_L_X, badge_y, pill=True)

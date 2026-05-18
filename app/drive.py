@@ -10,6 +10,7 @@ import logging
 
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError as GHttpError
 from googleapiclient.http import MediaIoBaseUpload
 
 from app.config import GOOGLE_SA_JSON, DRIVE_FOLDER_ID
@@ -46,6 +47,7 @@ def _get_drive_service():
             "GOOGLE_SA_JSON 환경변수가 비어 있습니다."
         )
     info = json.loads(GOOGLE_SA_JSON)
+    log.info("Drive 서비스 계정: %s | 스코프: %s", info.get("client_email"), SCOPES)
     creds = Credentials.from_service_account_info(info, scopes=SCOPES)
     return build("drive", "v3", credentials=creds, cache_discovery=False)
 
@@ -103,12 +105,22 @@ def upload_png(
         file_metadata["parents"] = [target_folder]
 
     # 업로드
+    log.info("Drive 업로드 시도: folder_id=%s, filename=%s", target_folder, filename)
     media = MediaIoBaseUpload(io.BytesIO(png_bytes), mimetype=MIME_PNG, resumable=False)
-    file = (
-        service.files()
-        .create(body=file_metadata, media_body=media, fields="id")
-        .execute()
-    )
+    try:
+        file = (
+            service.files()
+            .create(body=file_metadata, media_body=media, fields="id")
+            .execute()
+        )
+    except GHttpError as e:
+        log.error(
+            "Drive 업로드 HttpError %s — reason: %s — body: %s",
+            e.resp.status,
+            e.reason,
+            e.content.decode("utf-8", errors="replace")[:500],
+        )
+        raise
     file_id = file.get("id")
     log.info("Drive 업로드 완료: %s → id=%s", filename, file_id)
 

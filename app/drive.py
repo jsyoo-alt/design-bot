@@ -17,7 +17,7 @@ from app.config import GOOGLE_SA_JSON, DRIVE_FOLDER_ID
 log = logging.getLogger(__name__)
 
 SCOPES = [
-    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive",
 ]
 
 MIME_PNG = "image/png"

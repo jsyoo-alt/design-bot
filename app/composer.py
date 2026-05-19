@@ -78,6 +78,9 @@ TEXT_L_X = 48
 
 # Main-Sub 텍스트 행간 간격 (PSD 실측: Main bottom=123, Sub top=144 → 21px)
 MAIN_SUB_GAP = 21
+# 비즈보드 전용 줄간격: Pillow textbbox는 잉크 타이트 바운딩박스 기준이라
+# PSD 21px보다 시각적으로 좁게 렌더링됨 → 검수 기준 충족을 위해 확대
+BIZBOARD_MAIN_SUB_GAP = 34
 # 우측 로고 기준 (캔버스 우측에서 52px 여백)
 LOGO_RIGHT_MARGIN = 52
 
@@ -345,11 +348,11 @@ def compose_bizboard(
 
     title_bbox = draw.textbbox((0, 0), title_l, font=font_main)
     sub_bbox = draw.textbbox((0, 0), sub_l, font=font_sub)
-    block_h = (title_bbox[3] - title_bbox[1]) + MAIN_SUB_GAP + (sub_bbox[3] - sub_bbox[1])
+    block_h = (title_bbox[3] - title_bbox[1]) + BIZBOARD_MAIN_SUB_GAP + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
     _draw_text_centered(draw, title_l, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start, LEFT_PADDING, LEFT_TEXT_END)
-    _draw_text_centered(draw, sub_l, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start + (title_bbox[3] - title_bbox[1]) + MAIN_SUB_GAP, LEFT_PADDING, LEFT_TEXT_END)
+    _draw_text_centered(draw, sub_l, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start + (title_bbox[3] - title_bbox[1]) + BIZBOARD_MAIN_SUB_GAP, LEFT_PADDING, LEFT_TEXT_END)
 
     # 우측 텍스트: 이미지 끝 + OBJ_GAP(33) ~ CANVAS - MARGIN(48)
     RIGHT_TEXT_START = OBJ_X_END + OBJ_GAP         # 672 + 33 = 705
@@ -360,11 +363,11 @@ def compose_bizboard(
 
     title_bbox_r = draw.textbbox((0, 0), title_r_t, font=font_main)
     sub_bbox_r = draw.textbbox((0, 0), sub_r_t, font=font_sub)
-    block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + MAIN_SUB_GAP + (sub_bbox_r[3] - sub_bbox_r[1])
+    block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + BIZBOARD_MAIN_SUB_GAP + (sub_bbox_r[3] - sub_bbox_r[1])
     y_start_r = (CANVAS_SIZE[1] - block_h_r) // 2
 
     _draw_text_centered(draw, title_r_t, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
-    _draw_text_centered(draw, sub_r_t, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + MAIN_SUB_GAP, RIGHT_TEXT_START, RIGHT_TEXT_END)
+    _draw_text_centered(draw, sub_r_t, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + BIZBOARD_MAIN_SUB_GAP, RIGHT_TEXT_START, RIGHT_TEXT_END)
 
     # 오브제 이미지 — 캔버스 정중앙, 세로 중앙
     if object_image_url:

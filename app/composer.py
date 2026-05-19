@@ -402,6 +402,9 @@ def compose_basic_2line(
             _paste_with_alpha(canvas, obj_img, (x, y))
             _paste_logo_on_thumbnail(canvas, x, y)
 
+    # 로고: 우측 상단 고정 (이미지 위에 렌더링되도록 이미지 paste 이후 호출)
+    _paste_banner_logo(canvas, right=True)
+
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
@@ -453,6 +456,9 @@ def compose_basic_2line_left_obj(
             y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
             _paste_logo_on_thumbnail(canvas, x, y)
+
+    # 로고: 우측 상단 고정 (비즈보드와 동일 위치, 이미지 paste 이후 호출)
+    _paste_banner_logo(canvas, right=True)
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)

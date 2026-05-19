@@ -51,6 +51,7 @@ LOGO_MAX_W = 120
 LOGO_MAX_H = 46
 LOGO_MARGIN = 8
 LOGO_Y = 20  # 배너 상단 로고 Y 위치
+LOGO_SAFE_Y = LOGO_Y + LOGO_MAX_H + 8  # 74px: 로고와 겹치지 않는 오브젝트 배치 시작 Y
 
 # 신규 썸네일 영역 스펙 (피그마 실측)
 THUMB_FRAME_X = 652
@@ -236,16 +237,24 @@ def _fit_object_image(
     return img
 
 
-def _paste_object_image(canvas: Image.Image, img: Image.Image, area_x: int) -> None:
+def _paste_object_image(
+    canvas: Image.Image,
+    img: Image.Image,
+    area_x: int,
+    area_y: int = 0,
+) -> None:
     """오브젝트형(투명 PNG) 이미지를 캔버스에 배치.
 
     area_x: 오브젝트 영역 시작 X (폭 OBJECT_AREA_W)
+    area_y: 오브젝트 배치 시작 Y (기본 0 = 캔버스 전체).
+            로고 safe zone 확보 시 LOGO_SAFE_Y(74) 전달.
     - _fit_object_image() 로 최소 219px 보장
-    - 영역 내 수평 중앙 + 캔버스 세로 중앙 정렬
+    - 영역 내 수평 중앙 + 지정 구간 세로 중앙 정렬
     """
-    fitted = _fit_object_image(img)
+    area_h = CANVAS_SIZE[1] - area_y
+    fitted = _fit_object_image(img, area_h=area_h)
     x = area_x + (OBJECT_AREA_W - fitted.width) // 2
-    y = (CANVAS_SIZE[1] - fitted.height) // 2
+    y = area_y + (area_h - fitted.height) // 2
     _paste_with_alpha(canvas, fitted, (x, y))
 
 
@@ -387,18 +396,19 @@ def compose_basic_2line(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 오브제 이미지 (우측 MARGIN 여백 확보) — 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
+    # 오브제 이미지 (우측 MARGIN 여백 확보) — 로고 safe zone(y=74~) 내 배치
     OBJ_X = CANVAS_SIZE[0] - OBJECT_AREA_W - MARGIN  # 1029 - 315 - 48 = 666
+    _SAFE_THUMB_H = CANVAS_SIZE[1] - LOGO_SAFE_Y     # 184px (로고 아래 가용 높이)
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
-            _paste_object_image(canvas, obj_img, OBJ_X)
+            _paste_object_image(canvas, obj_img, OBJ_X, area_y=LOGO_SAFE_Y)
         else:
-            # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
-            obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
+            # 일반 이미지 → 썸네일 박스형 (315×184, 둥근 모서리, safe zone 내 세로 중앙)
+            obj_img = _fit_image(obj_img, THUMBNAIL_W, _SAFE_THUMB_H)
             obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
             x = OBJ_X
-            y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
+            y = LOGO_SAFE_Y + (_SAFE_THUMB_H - obj_img.height) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
             _paste_logo_on_thumbnail(canvas, x, y)
 
@@ -442,23 +452,24 @@ def compose_basic_2line_left_obj(
     bg_path = os.path.join(BACKGROUNDS_DIR, "bg_basic_2line_left.png")
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
-    # 좌측 오브제 이미지 — 좌측 MARGIN(48) 여백 확보, 누끼 여부에 따라 오브젝트형/썸네일형 자동 분기
+    # 좌측 오브제 이미지 — 로고 safe zone(y=74~) 내 배치
     OBJ_LEFT = MARGIN  # 48px
+    _SAFE_THUMB_H = CANVAS_SIZE[1] - LOGO_SAFE_Y  # 184px (로고 아래 가용 높이)
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
-            _paste_object_image(canvas, obj_img, OBJ_LEFT)
+            _paste_object_image(canvas, obj_img, OBJ_LEFT, area_y=LOGO_SAFE_Y)
         else:
-            # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
-            obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
+            # 일반 이미지 → 썸네일 박스형 (315×184, 둥근 모서리, safe zone 내 세로 중앙)
+            obj_img = _fit_image(obj_img, THUMBNAIL_W, _SAFE_THUMB_H)
             obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
             x = OBJ_LEFT
-            y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
+            y = LOGO_SAFE_Y + (_SAFE_THUMB_H - obj_img.height) // 2
             _paste_with_alpha(canvas, obj_img, (x, y))
             _paste_logo_on_thumbnail(canvas, x, y)
 
-    # 로고: 우측 상단 고정 (비즈보드와 동일 위치, 이미지 paste 이후 호출)
-    _paste_banner_logo(canvas, right=True)
+    # 로고: 좌측 상단 고정 (비즈보드와 동일 위치, 이미지 paste 이후 호출)
+    _paste_banner_logo(canvas, right=False)
 
     draw = ImageDraw.Draw(canvas)
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)

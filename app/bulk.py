@@ -206,6 +206,9 @@ def run_bulk(
             comment = f"✅ {row_label}"
             if drive_url:
                 comment += f"\n📎 Drive: {drive_url}"
+            size_kb = len(png_bytes) / 1024
+            if size_kb > 300:
+                comment += f"\n⚠️ 용량 {size_kb:.0f}KB — 카카오 가이드 최대치(300KB) 초과"
             slack.files_upload_v2(
                 channel=channel_id,
                 thread_ts=thread_ts,

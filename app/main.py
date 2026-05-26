@@ -405,6 +405,15 @@ def handle_submission(payload: dict):
                 title=title, sub=sub, badge_text=badge,
             )
 
+        # 300KB 초과 시 사용자에게 경고 (카카오 비즈보드 가이드 최대 300KB)
+        size_kb = len(img_bytes) / 1024
+        if size_kb > 300:
+            slack.chat_postMessage(
+                channel=channel_id,
+                thread_ts=thread_ts,
+                text=f"⚠️ 소재 용량이 {size_kb:.0f}KB로 카카오 가이드 최대치(300KB)를 초과합니다. 업로드는 정상 진행됩니다.",
+            )
+
         slack.files_upload_v2(
             channel=channel_id,
             thread_ts=thread_ts,

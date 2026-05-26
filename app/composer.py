@@ -26,10 +26,10 @@ def pt_to_px(pt: float) -> int:
     return round(pt)
 
 # 공식 스펙 텍스트 크기 (pt → px)
-MAIN_COPY_SIZE = pt_to_px(48)   # 64px
-SUB_COPY_SIZE  = pt_to_px(39)   # 52px
-BADGE_SIZE_1   = pt_to_px(30)   # 40px (한 줄)
-BADGE_SIZE_2   = pt_to_px(25)   # 33px (두 줄)
+MAIN_COPY_SIZE = pt_to_px(48)   # 48px
+SUB_COPY_SIZE  = pt_to_px(39)   # 39px
+BADGE_SIZE_1   = pt_to_px(30)   # 30px (한 줄)
+BADGE_SIZE_2   = pt_to_px(25)   # 25px (두 줄)
 
 # 공식 스펙 색상
 COLOR_MAIN = "#4C4C4C"
@@ -383,6 +383,7 @@ def compose_bizboard(
             _paste_with_alpha(canvas, obj_img, (x, y))
 
     _check_text_min_width(draw, title_l, sub_l, font_main, font_sub)
+    _check_text_min_width(draw, title_r_t, sub_r_t, font_main, font_sub)
     return _export(canvas)
 
 
@@ -566,6 +567,7 @@ def _paste_thumb_area(canvas: Image.Image, img: Image.Image,
                       x: int, y: int, w: int, h: int):
     """지정 영역에 상품 이미지 배치 (누끼/일반 자동 분기, 로고 미포함)"""
     if _has_transparency(img):
+        img = img.copy()  # thumbnail()은 in-place 변경 → 원본 보호
         img.thumbnail((w, h), Image.LANCZOS)
         px = x + (w - img.width) // 2
         py = y + (h - img.height) // 2

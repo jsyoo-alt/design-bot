@@ -208,6 +208,13 @@ def _draw_text_left(draw, text, font, color, x, y):
     draw.text((x, y), text, font=font, fill=color)
 
 
+def _draw_text_right(draw, text, font, color, x_end, y):
+    """텍스트를 x_end 기준 우측 정렬"""
+    bbox = draw.textbbox((0, 0), text, font=font)
+    text_w = bbox[2] - bbox[0]
+    draw.text((x_end - text_w, y), text, font=font, fill=color)
+
+
 def _fit_object_image(
     img: Image.Image,
     area_w: int = OBJECT_AREA_W,
@@ -353,8 +360,9 @@ def compose_bizboard(
     block_h = (title_bbox[3] - title_bbox[1]) + BIZBOARD_MAIN_SUB_GAP + (sub_bbox[3] - sub_bbox[1])
     y_start = (CANVAS_SIZE[1] - block_h) // 2
 
-    _draw_text_centered(draw, title_l, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start, LEFT_PADDING, LEFT_TEXT_END)
-    _draw_text_centered(draw, sub_l, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start + (title_bbox[3] - title_bbox[1]) + BIZBOARD_MAIN_SUB_GAP, LEFT_PADDING, LEFT_TEXT_END)
+    # 좌측 텍스트: 오브젝트 쪽(LEFT_TEXT_END)에 붙여 우측 정렬
+    _draw_text_right(draw, title_l, font_main, COLOR_MAIN, LEFT_TEXT_END, y_start)
+    _draw_text_right(draw, sub_l, font_sub, COLOR_SUB, LEFT_TEXT_END, y_start + (title_bbox[3] - title_bbox[1]) + BIZBOARD_MAIN_SUB_GAP)
 
     # 우측 텍스트: 이미지 끝 + OBJ_GAP(33) ~ CANVAS - MARGIN(48)
     RIGHT_TEXT_START = OBJ_X_END + OBJ_GAP         # 672 + 33 = 705
@@ -368,8 +376,9 @@ def compose_bizboard(
     block_h_r = (title_bbox_r[3] - title_bbox_r[1]) + BIZBOARD_MAIN_SUB_GAP + (sub_bbox_r[3] - sub_bbox_r[1])
     y_start_r = (CANVAS_SIZE[1] - block_h_r) // 2
 
-    _draw_text_centered(draw, title_r_t, font_main, COLOR_MAIN, CANVAS_SIZE[0], y_start_r, RIGHT_TEXT_START, RIGHT_TEXT_END)
-    _draw_text_centered(draw, sub_r_t, font_sub, COLOR_SUB, CANVAS_SIZE[0], y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + BIZBOARD_MAIN_SUB_GAP, RIGHT_TEXT_START, RIGHT_TEXT_END)
+    # 우측 텍스트: 오브젝트 쪽(RIGHT_TEXT_START)에 붙여 좌측 정렬
+    _draw_text_left(draw, title_r_t, font_main, COLOR_MAIN, RIGHT_TEXT_START, y_start_r)
+    _draw_text_left(draw, sub_r_t, font_sub, COLOR_SUB, RIGHT_TEXT_START, y_start_r + (title_bbox_r[3] - title_bbox_r[1]) + BIZBOARD_MAIN_SUB_GAP)
 
     # 오브제 이미지 — 캔버스 정중앙, 세로 중앙
     if object_image_url:

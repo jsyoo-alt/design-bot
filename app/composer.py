@@ -36,10 +36,12 @@ COLOR_MAIN = "#4C4C4C"
 COLOR_SUB  = "#777777"
 COLOR_BADGE_TEXT = "#FFFFFF"
 
-# 오브제 이미지 영역 (오브젝트형) — 완화 가이드: 최대 438×258
-OBJECT_AREA_W = 438   # 우측/좌측 오브젝트형 최대 폭 (PSD 실측: x=542~980)
+# 오브제 이미지 영역 (오브젝트형)
+# 완화 가이드 최대값은 438px이나, 텍스트 가독성 확보를 위해 기존 315px 유지
+OBJECT_AREA_W = 315
 OBJECT_AREA_H = 258
-# 비즈보드 전용 오브젝트 폭: 중앙 배치 + 좌우 텍스트 균형을 위해 별도 관리
+# 비즈보드 전용 오브젝트 폭: 중앙 배치 + 좌우 텍스트 균형을 위해 별도 상수로 관리
+# (장래 비즈보드 오브젝트 크기만 조정할 때 OBJECT_AREA_W에 영향 없이 변경 가능)
 BIZBOARD_OBJECT_W = 315
 
 # 썸네일 박스형 영역
@@ -403,7 +405,7 @@ def compose_basic_2line(
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
     # 오브제 이미지 (우측 MARGIN 여백 확보) — 로고 safe zone(y=74~) 내 배치
-    OBJ_X = CANVAS_SIZE[0] - OBJECT_AREA_W - MARGIN  # 1029 - 438 - 48 = 543
+    OBJ_X = CANVAS_SIZE[0] - OBJECT_AREA_W - MARGIN  # 1029 - 315 - 48 = 666
     _SAFE_THUMB_H = CANVAS_SIZE[1] - LOGO_SAFE_Y     # 184px (로고 아래 가용 높이)
     if object_image_url:
         obj_img = _download_image(object_image_url)
@@ -482,8 +484,8 @@ def compose_basic_2line_left_obj(
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
     # 우측 텍스트: 이미지 우측 끝 + OBJ_GAP_LEFT(50px, 좌측형 가이드), 우측도 MARGIN(48) 확보
-    TEXT_X = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP_LEFT  # 48 + 438 + 50 = 536
-    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X      # 1029 - 48 - 536 = 445
+    TEXT_X = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP_LEFT  # 48 + 315 + 50 = 413
+    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X      # 1029 - 48 - 413 = 568
     title = _truncate_text(draw, title, font_main, text_max_w)
     sub = _truncate_text(draw, sub, font_sub, text_max_w)
 

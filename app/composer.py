@@ -1,6 +1,6 @@
 """
 카카오 비즈보드 소재 합성 모듈
-가이드 기준: https://kakaobusiness.gitbook.io/main/ad/moment/performance/talkboard/content-guide
+가이드 기준: 비즈보드 PSD 완화 제작 가이드 v2025.07.09
 """
 
 import os
@@ -17,9 +17,9 @@ log = logging.getLogger(__name__)
 # 카카오 비즈보드 공식 스펙
 CANVAS_SIZE = (1029, 258)
 
-# Spoqa Han Sans 폰트 경로
-FONT_BOLD = os.path.join(FONTS_DIR, "SpoqaHanSansNeo-Bold.ttf")
-FONT_REGULAR = os.path.join(FONTS_DIR, "SpoqaHanSansNeo-Regular.ttf")
+# Pretendard 폰트 경로 (카카오 완화 가이드 v2025.07.09 기준)
+FONT_BOLD = os.path.join(FONTS_DIR, "Pretendard-Bold.ttf")
+FONT_REGULAR = os.path.join(FONTS_DIR, "Pretendard-Regular.ttf")
 
 # pt → px 변환 (72dpi 기준, 1pt = 1px)
 def pt_to_px(pt: float) -> int:
@@ -36,9 +36,11 @@ COLOR_MAIN = "#4C4C4C"
 COLOR_SUB  = "#777777"
 COLOR_BADGE_TEXT = "#FFFFFF"
 
-# 오브제 이미지 영역 (오브젝트형)
-OBJECT_AREA_W = 315
+# 오브제 이미지 영역 (오브젝트형) — 완화 가이드: 최대 438×258
+OBJECT_AREA_W = 438   # 우측/좌측 오브젝트형 최대 폭 (PSD 실측: x=542~980)
 OBJECT_AREA_H = 258
+# 비즈보드 전용 오브젝트 폭: 중앙 배치 + 좌우 텍스트 균형을 위해 별도 관리
+BIZBOARD_OBJECT_W = 315
 
 # 썸네일 박스형 영역
 THUMBNAIL_W = 315
@@ -76,11 +78,10 @@ INLINE_BADGE_COL = "#FF6600"
 # 좌측 텍스트 기준 X (PSD 가이드 실측)
 TEXT_L_X = 48
 
-# Main-Sub 텍스트 행간 간격 (PSD 실측: Main bottom=123, Sub top=144 → 21px)
-MAIN_SUB_GAP = 21
-# 비즈보드 전용 줄간격: Pillow textbbox는 잉크 타이트 바운딩박스 기준이라
-# PSD 21px보다 시각적으로 좁게 렌더링됨 → 검수 기준 충족을 위해 확대
-BIZBOARD_MAIN_SUB_GAP = 34
+# Main-Sub 텍스트 행간 간격
+# 완화 가이드 PSD 실측 (01_기본형): Main bottom=123, Sub top=146 → 23px
+MAIN_SUB_GAP = 23
+BIZBOARD_MAIN_SUB_GAP = 23  # 비즈보드도 동일 PSD 기준 적용
 # 우측 로고 기준 (캔버스 우측에서 52px 여백)
 LOGO_RIGHT_MARGIN = 52
 
@@ -245,18 +246,20 @@ def _paste_object_image(
     img: Image.Image,
     area_x: int,
     area_y: int = 0,
+    area_w: int = OBJECT_AREA_W,
 ) -> None:
     """오브젝트형(투명 PNG) 이미지를 캔버스에 배치.
 
-    area_x: 오브젝트 영역 시작 X (폭 OBJECT_AREA_W)
+    area_x: 오브젝트 영역 시작 X
     area_y: 오브젝트 배치 시작 Y (기본 0 = 캔버스 전체).
             로고 safe zone 확보 시 LOGO_SAFE_Y(74) 전달.
+    area_w: 오브젝트 영역 폭 (기본 OBJECT_AREA_W=438, 비즈보드는 BIZBOARD_OBJECT_W=315 전달)
     - _fit_object_image() 로 최소 219px 보장
     - 영역 내 수평 중앙 + 지정 구간 세로 중앙 정렬
     """
     area_h = CANVAS_SIZE[1] - area_y
-    fitted = _fit_object_image(img, area_h=area_h)
-    x = area_x + (OBJECT_AREA_W - fitted.width) // 2
+    fitted = _fit_object_image(img, area_w=area_w, area_h=area_h)
+    x = area_x + (area_w - fitted.width) // 2
     y = area_y + (area_h - fitted.height) // 2
     _paste_with_alpha(canvas, fitted, (x, y))
 
@@ -334,10 +337,9 @@ def compose_bizboard(
     font_main = _load_font(FONT_BOLD, MAIN_COPY_SIZE)
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
-    # 이미지 중앙 배치: 캔버스 정중앙 기준
-    # 이미지 영역(315px)이 캔버스 중앙(514px)에 오도록
-    OBJ_X = (CANVAS_SIZE[0] - OBJECT_AREA_W) // 2  # (1029 - 315) // 2 = 357
-    OBJ_X_END = OBJ_X + OBJECT_AREA_W              # 357 + 315 = 672
+    # 이미지 중앙 배치: 캔버스 정중앙 기준 (비즈보드는 BIZBOARD_OBJECT_W=315 고정)
+    OBJ_X = (CANVAS_SIZE[0] - BIZBOARD_OBJECT_W) // 2  # (1029 - 315) // 2 = 357
+    OBJ_X_END = OBJ_X + BIZBOARD_OBJECT_W              # 357 + 315 = 672
 
     # 좌측 텍스트: MARGIN(48) ~ 이미지 시작 - OBJ_GAP(33)
     LEFT_PADDING = MARGIN  # 48
@@ -373,10 +375,10 @@ def compose_bizboard(
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
-            _paste_object_image(canvas, obj_img, OBJ_X)
+            _paste_object_image(canvas, obj_img, OBJ_X, area_w=BIZBOARD_OBJECT_W)
         else:
             # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
-            obj_img = _fit_image(obj_img, THUMBNAIL_W, THUMBNAIL_H)
+            obj_img = _fit_image(obj_img, BIZBOARD_OBJECT_W, THUMBNAIL_H)
             obj_img = _round_corners(obj_img, THUMBNAIL_RADIUS)
             x = OBJ_X
             y = (CANVAS_SIZE[1] - THUMBNAIL_H) // 2
@@ -401,7 +403,7 @@ def compose_basic_2line(
     canvas = Image.open(bg_path).convert("RGBA").resize(CANVAS_SIZE)
 
     # 오브제 이미지 (우측 MARGIN 여백 확보) — 로고 safe zone(y=74~) 내 배치
-    OBJ_X = CANVAS_SIZE[0] - OBJECT_AREA_W - MARGIN  # 1029 - 315 - 48 = 666
+    OBJ_X = CANVAS_SIZE[0] - OBJECT_AREA_W - MARGIN  # 1029 - 438 - 48 = 543
     _SAFE_THUMB_H = CANVAS_SIZE[1] - LOGO_SAFE_Y     # 184px (로고 아래 가용 높이)
     if object_image_url:
         obj_img = _download_image(object_image_url)
@@ -480,8 +482,8 @@ def compose_basic_2line_left_obj(
     font_sub  = _load_font(FONT_REGULAR, SUB_COPY_SIZE)
 
     # 우측 텍스트: 이미지 우측 끝 + OBJ_GAP_LEFT(50px, 좌측형 가이드), 우측도 MARGIN(48) 확보
-    TEXT_X = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP_LEFT  # 48 + 315 + 50 = 413
-    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X      # 1029 - 48 - 413 = 568
+    TEXT_X = OBJ_LEFT + OBJECT_AREA_W + OBJ_GAP_LEFT  # 48 + 438 + 50 = 536
+    text_max_w = CANVAS_SIZE[0] - MARGIN - TEXT_X      # 1029 - 48 - 536 = 445
     title = _truncate_text(draw, title, font_main, text_max_w)
     sub = _truncate_text(draw, sub, font_sub, text_max_w)
 

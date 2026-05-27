@@ -248,20 +248,18 @@ def _paste_object_image(
     img: Image.Image,
     area_x: int,
     area_y: int = 0,
-    area_w: int = OBJECT_AREA_W,
 ) -> None:
     """오브젝트형(투명 PNG) 이미지를 캔버스에 배치.
 
-    area_x: 오브젝트 영역 시작 X
+    area_x: 오브젝트 영역 시작 X (폭 OBJECT_AREA_W)
     area_y: 오브젝트 배치 시작 Y (기본 0 = 캔버스 전체).
             로고 safe zone 확보 시 LOGO_SAFE_Y(74) 전달.
-    area_w: 오브젝트 영역 폭 (기본 OBJECT_AREA_W=438, 비즈보드는 BIZBOARD_OBJECT_W=315 전달)
     - _fit_object_image() 로 최소 219px 보장
     - 영역 내 수평 중앙 + 지정 구간 세로 중앙 정렬
     """
     area_h = CANVAS_SIZE[1] - area_y
-    fitted = _fit_object_image(img, area_w=area_w, area_h=area_h)
-    x = area_x + (area_w - fitted.width) // 2
+    fitted = _fit_object_image(img, area_h=area_h)
+    x = area_x + (OBJECT_AREA_W - fitted.width) // 2
     y = area_y + (area_h - fitted.height) // 2
     _paste_with_alpha(canvas, fitted, (x, y))
 
@@ -377,7 +375,7 @@ def compose_bizboard(
     if object_image_url:
         obj_img = _download_image(object_image_url)
         if _has_transparency(obj_img):
-            _paste_object_image(canvas, obj_img, OBJ_X, area_w=BIZBOARD_OBJECT_W)
+            _paste_object_image(canvas, obj_img, OBJ_X)
         else:
             # 일반 이미지 → 썸네일 박스형 (315x186, 둥근 모서리, 세로 중앙)
             obj_img = _fit_image(obj_img, BIZBOARD_OBJECT_W, THUMBNAIL_H)
